@@ -1,11 +1,10 @@
 import logging
 import os
-import timeit
 
 import numpy
 
 import porch
-import torch.nn as nn
+from porch.modules.dropout import sigmoid
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +48,14 @@ def subsample_dataset(train_dataset, validate_dataset, test_dataset, fraction=0.
 	return train_dataset, validate_dataset, test_dataset
 
 
+def display_gradient(network, **kwargs):
+	for param in network.parameters():
+		print("debug: param gradient: %s" % (param.grad_fn))
+
+
 def display_architecture(network, **kwargs):
 	for name, module in network.named_modules():
-		print("debug: %s" % (module))
+		print("debug: architecture: %s" % (module))
 
 
 def debug_function_output(network, dataset, **kwargs):
@@ -236,13 +240,14 @@ def snapshot_dropout(network, epoch_index, settings=None, **kwargs):
 	for name, module in network.named_modules():
 		# if (type(module) is nn.Dropout) or (type(module) is nn.Dropout2d) or (type(module) is nn.Dropout3d):
 		# layer_retain_probability = 1 - module.p
-
-		if (type(module) is porch.modules.VariationalDropoutKingma) or \
-				(type(module) is porch.modules.LinearSparseVariationalDropout):
-			layer_retain_probability = 1. / (1. + numpy.exp(module.log_alpha.data.numpy()) ** 2)
-		elif (type(module) is porch.modules.GaussianDropoutSrivastava) or \
-				(type(module) is porch.modules.LinearFastGaussianDropout):
-			layer_retain_probability = 1. / (1. + numpy.exp(module.log_alpha.numpy()) ** 2)
+		if (type(module) is porch.modules.AdaptiveBernoulliDropoutInLogitSpace):
+			layer_retain_probability = 1. - sigmoid(module.logit_p).data.numpy()
+		elif (type(module) is porch.modules.VariationalDropout) or \
+				(type(module) is porch.modules.LinearAndVariationalDropout):
+			layer_retain_probability = 1. / (1. + numpy.exp(module.log_alpha.data.numpy()))
+		elif (type(module) is porch.modules.GaussianDropout) or \
+				(type(module) is porch.modules.LinearAndGaussianDropout):
+			layer_retain_probability = 1. / (1. + numpy.exp(module.log_alpha.numpy()))
 		else:
 			continue
 

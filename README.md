@@ -10,5 +10,6 @@ Run sparse variational dropout
 	--information=accuracy \
 	--minibatch_size=64 \
 	--number_of_epochs=30 \
-	--optimization_kwargs=lr:1e-2,momentum:0.9
+	--optimization_kwargs=lr:1e-2,momentum:0.9 \
+	--snapshot=snapshot_dropout
 

@@ -1,15 +1,14 @@
 import logging
-import pickle
 import os
 import timeit
+
 import numpy
-
-import porch
-
 import torch
 import torch.nn as nn
 import torch.nn.functional
 import torch.optim as optim
+
+import porch
 
 logger = logging.getLogger(__name__)
 
@@ -134,10 +133,11 @@ def train_epoch(model, dataset, optimizer,
 			else:
 				epoch_opt_loss += batch_loss.item()
 
-		if regularizer_functions is not None:
+		if (regularizer_functions is not None) and (len(regularizer_functions) > 0):
 			batch_regs = 0
-			for regularizer_function in regularizer_functions:
-				batch_reg = regularizer_function(model, input=minibatch_x, output=output, **regularizer_function_kwargs)
+			for regularizer_function, regularizer_weight in regularizer_functions.items():
+				batch_reg = regularizer_function(model, input=minibatch_x, output=output,
+				                                 **regularizer_function_kwargs) * regularizer_weight
 				batch_regs += batch_reg
 				if ("size_average" not in regularizer_function_kwargs) or regularizer_function_kwargs["size_average"]:
 					epoch_opt_reg += batch_reg.item() * len(minibatch_x)
@@ -157,6 +157,11 @@ def train_epoch(model, dataset, optimizer,
 
 		batch_obj = batch_losses + batch_regs
 		batch_obj.backward()
+
+		for name, module in model.named_modules():
+			if (type(module) is porch.modules.dropout.AdaptiveBernoulliDropout):
+				print(module.p, module.p.grad)
+
 		optimizer.step()
 
 		minibatch_start_index += minibatch_size
@@ -167,6 +172,8 @@ def train_epoch(model, dataset, optimizer,
 	epoch_opt_reg /= len(dataset_x)
 
 	return epoch_time, epoch_opt_loss, epoch_opt_reg, epoch_info_obj
+
+
 
 
 def test_epoch(model, dataset,
@@ -301,6 +308,8 @@ def train_model(network, settings):
 
 	if porch.debug.display_architecture in settings.debug:
 		porch.debug.display_architecture(network)
+	if porch.debug.display_gradient in settings.debug:
+		porch.debug.display_gradient(network)
 
 	optimizer = settings.optimization(network.parameters(), **settings.optimization_kwargs)
 
