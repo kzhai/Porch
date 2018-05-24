@@ -242,6 +242,8 @@ def snapshot_dropout(network, epoch_index, settings=None, **kwargs):
 		# layer_retain_probability = 1 - module.p
 		if (type(module) is porch.modules.AdaptiveBernoulliDropoutInLogitSpace):
 			layer_retain_probability = 1. - sigmoid(module.logit_p).data.numpy()
+		elif (type(module) is porch.modules.AdaptiveBernoulliDropout):
+			layer_retain_probability = 1. - module.p.data.numpy()
 		elif (type(module) is porch.modules.VariationalDropout) or \
 				(type(module) is porch.modules.LinearAndVariationalDropout):
 			layer_retain_probability = 1. / (1. + numpy.exp(module.log_alpha.data.numpy()))

@@ -1,5 +1,7 @@
 import logging
 
+import numpy
+
 import torch
 import torch.nn.functional
 
@@ -57,6 +59,7 @@ def vardrop_(network, input=None, output=None):
 
 			# TODO: This is only an approximation, using expectation on the draws to reduce the memory usage.
 			E_log_p_dropout = torch.log(p) * p * input.size(0) + torch.log(1 - p) * (1 - p) * input.size(0)
+
 			E_log_q_dropout = - torch.log(p) * p - torch.log(1 - p) * (1 - p)
 
 			variational_lower_bound += E_log_p_dropout.sum() + E_log_q_dropout.sum()

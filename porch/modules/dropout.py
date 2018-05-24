@@ -46,6 +46,13 @@ class AdaptiveBernoulliDropoutInLogitSpace(nn.Module):
 		else:
 			p = sigmoid(self.logit_p)
 
+		'''
+		filter = torch.bernoulli(1 - p)
+		if self.training:
+			return input.div(1 - p).mul(filter)
+		else:
+			return input
+		'''
 		return _functions.dropout.Dropout.apply(input, p, self.training)
 
 
@@ -58,12 +65,21 @@ class AdaptiveBernoulliDropout(nn.Module):
 		self.p = nn.Parameter(torch.tensor(p, dtype=torch.float))
 
 	def forward(self, input):
+		#if torch.max(self.p) > 1 or torch.min(self.p) < 0:
+			#self.p.data = self.p.data.clamp_(1e-6, 1 - 1e-6)
 		if self.p.dim() == 1:
 			p = self.p.expand(input.shape[0], -1)
 		else:
 			p = self.p
 
-		return _functions.dropout.Dropout.apply(input, p, self.training)
+
+		filter = torch.bernoulli(1 - torch.clamp(p, 0, 1))
+		if self.training:
+			return input.div(1 - torch.clamp(p, 0, 1)).mul(filter)
+		else:
+			return input
+
+		#return _functions.dropout.Dropout.apply(input, p, self.training)
 
 
 class GaussianDropout(nn.Module):

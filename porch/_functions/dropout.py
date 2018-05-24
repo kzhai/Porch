@@ -7,11 +7,9 @@ from torch.autograd.function import InplaceFunction
 class Dropout(Function):
 	@staticmethod
 	def forward(ctx, input, p, train):
-		'''
 		if numpy.any(p < 0) or numpy.any(p > 1):
 			raise ValueError("dropout probability has to be between 0 and 1, "
 			                 "but got {} with max {} and min {}".format(p, torch.max(p), torch.min(p)))
-		'''
 		filter = torch.bernoulli(1 - p)
 
 		'''
@@ -36,8 +34,14 @@ class Dropout(Function):
 	@staticmethod
 	def backward(ctx, grad_output):
 		if ctx.train:
-			return grad_output * ctx.filter / (1 - ctx.p), -grad_output * ctx.input * ctx.filter / (1 - ctx.p).pow(
-				2), None
+			return grad_output * ctx.filter / (1 - ctx.p), -grad_output * ctx.input * ctx.filter / (1 - ctx.p).pow(2), None
+			#return grad_output * ctx.filter / (1 - ctx.p), -grad_output * ctx.input / (1 - ctx.p), None
+			'''
+			return grad_output * ctx.filter / (1 - ctx.p), \
+			       grad_output * ctx.input * (1 - ctx.filter) ( ctx.p.pow(-ctx.filter) * (1 - ctx.p).pow(ctx.filter - 1)
+			                                  +  ctx.p.pow(1 - ctx.filter)), \
+			       None
+			'''
 		else:
 			return grad_output, None, None
 
