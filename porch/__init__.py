@@ -2,10 +2,12 @@ from .argument import *
 from .base import *
 from .debug import *
 from .loss import *
-from .mnist import *
+from porch.models.mlp import *
+from porch.models.cnn import *
 from .models import *
 from .modules import *
 from .regularizer import *
+from .optim import *
 
 from . import _functions
 

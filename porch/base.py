@@ -1,3 +1,4 @@
+import argparse
 import logging
 import os
 import timeit
@@ -16,7 +17,8 @@ __all__ = [
 	# "test",
 	# "DiscriminativeModel",
 	# "GenerativeModel",
-	"train_model",
+	# "train_model",
+	"start_model"
 ]
 
 
@@ -88,480 +90,29 @@ def load_datasets_to_resume(input_directory, model_directory, output_directory):
 	return train_dataset, validate_dataset, test_dataset
 
 
-def train_epoch_old(model, dataset, optimizer,
-                    # optimization_algorithm=optim.SGD,
-                    # optimization_algorithm_kwargs={"lr": 1e-3, "momentum": 0.9},
-                    loss_functions,
-                    loss_function_kwargs={},
-                    minibatch_size=64,
-                    regularizer_functions=None,
-                    regularizer_function_kwargs={},
-                    information_function=None,
-                    information_function_kwargs={},
-                    generative_model=False):
-	# device = torch.device(settings.device)
-
-	model.train()
-
-	dataset_x, dataset_y = dataset
-	number_of_data = dataset_x.shape[0]
-	data_indices = numpy.random.permutation(number_of_data)
-
-	epoch_opt_loss = 0.
-	epoch_opt_reg = 0.
-	epoch_info_obj = 0.
-	epoch_time = timeit.default_timer()
-	minibatch_start_index = 0
-	while minibatch_start_index < number_of_data:
-		# automatically handles the left-over data
-		minibatch_indices = data_indices[minibatch_start_index:minibatch_start_index + minibatch_size]
-
-		minibatch_x = dataset_x[minibatch_indices, :]
-		minibatch_y = minibatch_x if generative_model else dataset_y[minibatch_indices]
-
-		# data, labels = data.to(device), labels.to(device)
-		optimizer.zero_grad()
-		output = model(minibatch_x)
-
-		batch_losses = 0
-		for loss_function in loss_functions:
-			batch_loss = loss_function(output, minibatch_y, **loss_function_kwargs)
-			batch_losses += batch_loss
-			if ("size_average" not in loss_function_kwargs) or loss_function_kwargs["size_average"]:
-				epoch_opt_loss += batch_loss.item() * len(minibatch_x)
-			else:
-				epoch_opt_loss += batch_loss.item()
-
-		if (regularizer_functions is not None) and (len(regularizer_functions) > 0):
-			batch_regs = 0
-			for regularizer_function, regularizer_weight in regularizer_functions.items():
-				batch_reg = regularizer_function(model, input=minibatch_x, output=output,
-				                                 **regularizer_function_kwargs) * regularizer_weight
-				batch_regs += batch_reg
-				if ("size_average" not in regularizer_function_kwargs) or regularizer_function_kwargs["size_average"]:
-					epoch_opt_reg += batch_reg.item() * len(minibatch_x)
-				else:
-					epoch_opt_reg += batch_reg.item()
-		else:
-			batch_regs = 0
-
-		if information_function is not None:
-			batch_info = information_function(output, minibatch_y, **information_function_kwargs).item()
-			if ("size_average" not in information_function_kwargs) or information_function_kwargs["size_average"]:
-				epoch_info_obj += batch_info * len(minibatch_x)
-			else:
-				epoch_info_obj += batch_info
-		else:
-			batch_info = 0
-
-		batch_obj = batch_losses + batch_regs
-		batch_obj.backward()
-
-		'''
-		for name, module in model.named_modules():
-			if (type(module) is porch.modules.dropout.AdaptiveBernoulliDropout):
-				print(module.p, module.p.grad)
-		'''
-
-		optimizer.step()
-
-		minibatch_start_index += minibatch_size
-
-	epoch_time = timeit.default_timer() - epoch_time
-	epoch_info_obj /= len(dataset_x)
-	epoch_opt_loss /= len(dataset_x)
-	epoch_opt_reg /= len(dataset_x)
-
-	return epoch_time, epoch_opt_loss, epoch_opt_reg, epoch_info_obj
-
-
 #
 #
 #
 #
 #
 
-class GenerativeModel(nn.Module):
-	def __init__(self):
-		super(GenerativeModel, self).__init__()
 
-	def forward(self, *input):
-		r"""Defines the computation performed at every call.
-
-		Should be overridden by all subclasses.
-
-		.. note::
-			Although the recipe for forward pass needs to be defined within
-			this function, one should call the :class:`Module` instance afterwards
-			instead of this since the former takes care of running the
-			registered hooks while the latter silently ignores them.
-		"""
-		raise NotImplementedError()
-
-	def train_epoch(model, dataset, optimizer,
-	                # optimization_algorithm=optim.SGD,
-	                # optimization_algorithm_kwargs={"lr": 1e-3, "momentum": 0.9},
-	                loss_functions,
-	                loss_function_kwargs={},
-	                minibatch_size=64,
-	                regularizer_functions=None,
-	                regularizer_function_kwargs={},
-	                information_function=None,
-	                information_function_kwargs={}):
-		# device = torch.device(settings.device)
-
-		model.train()
-
-		dataset_x, dataset_y = dataset
-		number_of_data = dataset_x.shape[0]
-		data_indices = numpy.random.permutation(number_of_data)
-
-		epoch_opt_loss = 0.
-		epoch_opt_reg = 0.
-		epoch_info_obj = 0.
-		epoch_time = timeit.default_timer()
-		minibatch_start_index = 0
-		while minibatch_start_index < number_of_data:
-			# automatically handles the left-over data
-			minibatch_indices = data_indices[minibatch_start_index:minibatch_start_index + minibatch_size]
-
-			minibatch_x = dataset_x[minibatch_indices, :]
-			minibatch_y = minibatch_x
-
-			# data, labels = data.to(device), labels.to(device)
-			optimizer.zero_grad()
-			output = model(minibatch_x)
-
-			batch_losses = 0
-			for loss_function in loss_functions:
-				batch_loss = loss_function(output, minibatch_y, **loss_function_kwargs)
-				batch_losses += batch_loss
-				if ("size_average" not in loss_function_kwargs) or loss_function_kwargs["size_average"]:
-					epoch_opt_loss += batch_loss.item() * len(minibatch_x)
-				else:
-					epoch_opt_loss += batch_loss.item()
-
-			if (regularizer_functions is not None) and (len(regularizer_functions) > 0):
-				batch_regs = 0
-				for regularizer_function, regularizer_weight in regularizer_functions.items():
-					batch_reg = regularizer_function(model, input=minibatch_x, output=output,
-					                                 **regularizer_function_kwargs) * regularizer_weight
-					batch_regs += batch_reg
-					if ("size_average" not in regularizer_function_kwargs) or regularizer_function_kwargs[
-						"size_average"]:
-						epoch_opt_reg += batch_reg.item() * len(minibatch_x)
-					else:
-						epoch_opt_reg += batch_reg.item()
-			else:
-				batch_regs = 0
-
-			if information_function is not None:
-				batch_info = information_function(output, minibatch_y, **information_function_kwargs).item()
-				if ("size_average" not in information_function_kwargs) or information_function_kwargs["size_average"]:
-					epoch_info_obj += batch_info * len(minibatch_x)
-				else:
-					epoch_info_obj += batch_info
-			else:
-				batch_info = 0
-
-			batch_obj = batch_losses + batch_regs
-			batch_obj.backward()
-
-			'''
-			for name, module in model.named_modules():
-				if (type(module) is porch.modules.dropout.AdaptiveBernoulliDropout):
-					print(module.p, module.p.grad)
-			'''
-
-			optimizer.step()
-
-			minibatch_start_index += minibatch_size
-
-		epoch_time = timeit.default_timer() - epoch_time
-		epoch_info_obj /= len(dataset_x)
-		epoch_opt_loss /= len(dataset_x)
-		epoch_opt_reg /= len(dataset_x)
-
-		return epoch_time, epoch_opt_loss, epoch_opt_reg, epoch_info_obj
-
-	def test_epoch(model, dataset,
-	               loss_functions,
-	               loss_function_kwargs={},
-	               minibatch_size=64,
-	               regularizer_functions=None,
-	               regularizer_function_kwargs={},
-	               information_function=False,
-	               information_function_kwargs={}
-	               ):
-		# device = torch.device(settings.device)
-
-		model.eval()
-
-		dataset_x, dataset_y = dataset
-		number_of_data = dataset_x.shape[0]
-		data_indices = numpy.random.permutation(number_of_data)
-
-		epoch_opt_loss = 0.
-		epoch_opt_reg = 0.
-		epoch_info_obj = 0.
-		epoch_time = timeit.default_timer()
-
-		with torch.no_grad():
-			minibatch_start_index = 0
-			while minibatch_start_index < number_of_data:
-				# automatically handles the left-over data
-				minibatch_indices = data_indices[minibatch_start_index:minibatch_start_index + minibatch_size]
-
-				minibatch_x = dataset_x[minibatch_indices, :]
-				# minibatch_y = dataset_y[minibatch_indices]
-				minibatch_y = minibatch_x
-
-				# data, labels = data.to(device), labels.to(device)
-				output = model(minibatch_x)
-
-				batch_losses = 0
-				for loss_function in loss_functions:
-					batch_loss = loss_function(output, minibatch_y, **loss_function_kwargs)
-					batch_losses += batch_loss
-					if ("size_average" not in loss_function_kwargs) or loss_function_kwargs["size_average"]:
-						epoch_opt_loss += batch_loss.item() * len(minibatch_x)
-					else:
-						epoch_opt_loss += batch_loss.item()
-
-				if regularizer_functions is not None:
-					batch_regs = 0
-					for regularizer_function in regularizer_functions:
-						batch_reg = regularizer_function(model, input=minibatch_x, output=output,
-						                                 **regularizer_function_kwargs)
-						batch_regs += batch_reg
-						if ("size_average" not in regularizer_function_kwargs) or regularizer_function_kwargs[
-							"size_average"]:
-							epoch_opt_reg += batch_reg.item() * len(minibatch_x)
-						else:
-							epoch_opt_reg += batch_reg.item()
-				else:
-					batch_regs = 0
-
-				if information_function is not None:
-					batch_info = information_function(output, minibatch_y, **information_function_kwargs).item()
-					if ("size_average" not in information_function_kwargs) or information_function_kwargs[
-						"size_average"]:
-						epoch_info_obj += batch_info * len(minibatch_x)
-					else:
-						epoch_info_obj += batch_info
-
-				minibatch_start_index += minibatch_size
-
-		epoch_time = timeit.default_timer() - epoch_time
-		epoch_info_obj /= len(dataset_x)
-		epoch_opt_loss /= len(dataset_x)
-		epoch_opt_reg /= len(dataset_x)
-
-		return epoch_time, epoch_opt_loss, epoch_opt_reg, epoch_info_obj
-
-
-class OptimizerFramework():
-	def __init__(self, model, dataset, optimizers,
-	             loss_functions,
-	             loss_function_kwargs={},
-	             regularizer_functions={},
-	             regularizer_function_kwargs={},
-	             # information_function={},
-	             # information_function_kwargs={}
-	             ):
-
-		self.model = model
-		# self.dataset = dataset
-		# self.optimizers = optimizers
-		self.loss_functions = loss_functions
-		self.loss_function_kwargs = loss_function_kwargs
-		self.regularizer_functions = regularizer_functions
-		self.regularizer_function_kwargs = regularizer_function_kwargs
-
-	def train_epoch(self, optimizer, dataset, minibatch_size=64):
-
-		'''
-		model, dataset, optimizer,
-	                # optimization_algorithm=optim.SGD,
-	                # optimization_algorithm_kwargs={"lr": 1e-3, "momentum": 0.9},
-	                loss_functions,
-	                loss_function_kwargs={},
-	                minibatch_size=64,
-	                regularizer_functions={},
-	                regularizer_function_kwargs={},
-	                information_function={},
-	                information_function_kwargs={}
-		'''
-
-		# device = torch.device(settings.device)
-
-		self.model.train()
-
-		dataset_x, dataset_y = dataset
-		number_of_data = dataset_x.shape[0]
-		data_indices = numpy.random.permutation(number_of_data)
-
-		epoch_total_loss = 0.
-		epoch_total_reg = 0.
-		epoch_info_obj = 0.
-		epoch_time = timeit.default_timer()
-		minibatch_start_index = 0
-		while minibatch_start_index < number_of_data:
-			# automatically handles the left-over data
-			minibatch_indices = data_indices[minibatch_start_index:minibatch_start_index + minibatch_size]
-
-			minibatch_x = dataset_x[minibatch_indices, :]
-			minibatch_y = dataset_y[minibatch_indices]
-
-			minibatch_total_loss, minibatch_total_reg = self.train_minibatch(optimizer, minibatch_x, minibatch_y)
-
-			epoch_total_loss += minibatch_total_loss
-			epoch_total_reg += minibatch_total_reg
-
-			minibatch_start_index += minibatch_size
-
-		epoch_time = timeit.default_timer() - epoch_time
-		epoch_info_obj /= len(dataset_x)
-		epoch_total_loss /= len(dataset_x)
-		epoch_total_reg /= len(dataset_x)
-
-		return epoch_time, epoch_total_loss, epoch_total_reg, epoch_info_obj
-
-	def train_minibatch(self, optimizer, minibatch_x, minibatch_y):
-		# data, labels = data.to(device), labels.to(device)
-
-		optimizer.zero_grad()
-		output = self.network(minibatch_x)
-
-		batch_total_loss = 0
-		batch_total_reg = 0
-
-		batch_losses = 0
-		for loss_function in self.loss_functions:
-			batch_loss = loss_function(output, minibatch_y, **self.loss_function_kwargs)
-			batch_losses += batch_loss
-			if ("size_average" not in self.loss_function_kwargs) or self.loss_function_kwargs["size_average"]:
-				batch_total_loss += batch_loss.item() * len(minibatch_x)
-			else:
-				batch_total_loss += batch_loss.item()
-
-		batch_regs = 0
-		for regularizer_function, regularizer_weight in self.regularizer_functions.items():
-			batch_reg = regularizer_function(self.network, input=minibatch_x, output=output,
-			                                 **self.regularizer_function_kwargs) * regularizer_weight
-			batch_regs += batch_reg
-			if ("size_average" not in self.regularizer_function_kwargs) or self.regularizer_function_kwargs[
-				"size_average"]:
-				batch_total_reg += batch_reg.item() * len(minibatch_x)
-			else:
-				batch_total_reg += batch_reg.item()
-
-		'''
-		if information_function is not None:
-			batch_info = information_function(output, minibatch_y, **information_function_kwargs).item()
-			if ("size_average" not in information_function_kwargs) or information_function_kwargs["size_average"]:
-				epoch_info_obj += batch_info * len(minibatch_x)
-			else:
-				epoch_info_obj += batch_info
-		else:
-			batch_info = 0
-		'''
-
-		batch_obj = batch_losses + batch_regs
-		batch_obj.backward()
-
-		optimizer.step()
-
-		return batch_total_loss, batch_total_reg
-
-	def test_epoch(model, dataset,
-	               loss_functions,
-	               loss_function_kwargs={},
-	               minibatch_size=64,
-	               regularizer_functions=None,
-	               regularizer_function_kwargs={},
-	               information_function=False,
-	               information_function_kwargs={}):
-		# device = torch.device(settings.device)
-
-		model.eval()
-
-		dataset_x, dataset_y = dataset
-		number_of_data = dataset_x.shape[0]
-		data_indices = numpy.random.permutation(number_of_data)
-
-		epoch_opt_loss = 0.
-		epoch_opt_reg = 0.
-		epoch_info_obj = 0.
-		epoch_time = timeit.default_timer()
-
-		with torch.no_grad():
-			minibatch_start_index = 0
-			while minibatch_start_index < number_of_data:
-				# automatically handles the left-over data
-				minibatch_indices = data_indices[minibatch_start_index:minibatch_start_index + minibatch_size]
-
-				minibatch_x = dataset_x[minibatch_indices, :]
-				# minibatch_y = dataset_y[minibatch_indices]
-				minibatch_y = dataset_y[minibatch_indices]
-
-				# data, labels = data.to(device), labels.to(device)
-				output = model(minibatch_x)
-
-				batch_losses = 0
-				for loss_function in loss_functions:
-					batch_loss = loss_function(output, minibatch_y, **loss_function_kwargs)
-					batch_losses += batch_loss
-					if ("size_average" not in loss_function_kwargs) or loss_function_kwargs["size_average"]:
-						epoch_opt_loss += batch_loss.item() * len(minibatch_x)
-					else:
-						epoch_opt_loss += batch_loss.item()
-
-				if regularizer_functions is not None:
-					batch_regs = 0
-					for regularizer_function in regularizer_functions:
-						batch_reg = regularizer_function(model, input=minibatch_x, output=output,
-						                                 **regularizer_function_kwargs)
-						batch_regs += batch_reg
-						if ("size_average" not in regularizer_function_kwargs) or regularizer_function_kwargs[
-							"size_average"]:
-							epoch_opt_reg += batch_reg.item() * len(minibatch_x)
-						else:
-							epoch_opt_reg += batch_reg.item()
-				else:
-					batch_regs = 0
-
-				if information_function is not None:
-					batch_info = information_function(output, minibatch_y, **information_function_kwargs).item()
-					if ("size_average" not in information_function_kwargs) or information_function_kwargs[
-						"size_average"]:
-						epoch_info_obj += batch_info * len(minibatch_x)
-					else:
-						epoch_info_obj += batch_info
-
-				minibatch_start_index += minibatch_size
-
-		epoch_time = timeit.default_timer() - epoch_time
-		epoch_info_obj /= len(dataset_x)
-		epoch_opt_loss /= len(dataset_x)
-		epoch_opt_reg /= len(dataset_x)
-
-		return epoch_time, epoch_opt_loss, epoch_opt_reg, epoch_info_obj
-
-
-def train_epoch(network,
+def train_epoch(device,
+                network,
                 optimizer,
                 dataset,
+                #
                 loss_functions,
                 regularizer_functions={},
+                information_functions={},
                 #
                 loss_function_kwargs={},
                 regularizer_function_kwargs={},
+                information_function_kwargs={},
+                #
                 minibatch_size=64,
                 ):
-	# device = torch.device(settings.device)
-
-	network.train()
+	# network.train()
 
 	dataset_x, dataset_y = dataset
 	number_of_data = dataset_x.shape[0]
@@ -569,6 +120,10 @@ def train_epoch(network,
 
 	epoch_total_loss = 0.
 	epoch_total_reg = 0.
+	epoch_total_infos = {}
+	for information_function in information_functions:
+		epoch_total_infos[information_function] = 0.
+
 	epoch_time = timeit.default_timer()
 	minibatch_start_index = 0
 	while minibatch_start_index < number_of_data:
@@ -579,89 +134,101 @@ def train_epoch(network,
 		minibatch_y = dataset_y[minibatch_indices]
 		data_minibatch = (minibatch_x, minibatch_y)
 
-		train_minibatch_output = train_minibatch(network,
-		                                         optimizer,
-		                                         data_minibatch,
-		                                         loss_functions,
-		                                         regularizer_functions,
+		train_minibatch_output = train_minibatch(device=device,
+		                                         network=network,
+		                                         optimizer=optimizer,
+		                                         dataset=data_minibatch,
 		                                         #
-		                                         loss_function_kwargs,
-		                                         regularizer_function_kwargs,
-		                                         # information_function={},
-		                                         # information_function_kwargs={}
+		                                         loss_functions=loss_functions,
+		                                         regularizer_functions=regularizer_functions,
+		                                         information_functions=information_functions,
+		                                         #
+		                                         loss_function_kwargs=loss_function_kwargs,
+		                                         regularizer_function_kwargs=regularizer_function_kwargs,
+		                                         information_function_kwargs=information_function_kwargs
 		                                         )
 
-		minibatch_time, minibatch_total_loss, minibatch_total_reg = train_minibatch_output
+		minibatch_time, minibatch_total_loss, minibatch_total_reg, minibatch_total_infos = train_minibatch_output
 
 		epoch_total_loss += minibatch_total_loss
 		epoch_total_reg += minibatch_total_reg
+		for information_function in information_functions:
+			epoch_total_infos[information_function] += minibatch_total_infos[information_function]
 
 		minibatch_start_index += minibatch_size
 
 	epoch_time = timeit.default_timer() - epoch_time
 	epoch_average_loss = epoch_total_loss / len(dataset_x)
 	epoch_average_reg = epoch_total_reg / len(dataset_x)
+	epoch_average_infos = {}
+	for information_function in information_functions:
+		epoch_average_infos[information_function] = epoch_total_infos[information_function] / len(dataset_x)
 
-	return epoch_time, epoch_average_loss, epoch_average_reg
+	return epoch_time, epoch_average_loss, epoch_average_reg, epoch_average_infos
 
 
-def train_minibatch(network,
+def train_minibatch(device,
+                    network,
                     optimizer,
                     dataset,
+                    #
                     loss_functions,
                     regularizer_functions={},
+                    information_functions={},
                     #
                     loss_function_kwargs={},
                     regularizer_function_kwargs={},
-                    # information_function={},
-                    # information_function_kwargs={}
+                    information_function_kwargs={}
+                    #
                     ):
-	network.train(False)
+	# network.train()
 
-	dataset_x, dataset_y = dataset
-	# minibatch_x, minibatch_y = minibatch_x.to(device), minibatch_y.to(device)
+	minibatch_x, minibatch_y = dataset
+	minibatch_x, minibatch_y = minibatch_x.to(device), minibatch_y.to(device)
 
 	running_time = timeit.default_timer()
 
 	optimizer.zero_grad()
-	output = network(dataset_x)
+	output = network(minibatch_x)
 
-	dataset_total_losses = 0
-	dataset_total_regs = 0
+	minibatch_total_loss = 0
+	minibatch_total_reg = 0
+	minibatch_total_infos = {}
+	for information_function in information_functions:
+		minibatch_total_infos[information_function] = 0
 
-	dataset_average_losses = 0
+	minibatch_average_loss = 0
 	for loss_function in loss_functions:
-		dataset_average_loss = loss_function(output, dataset_y, **loss_function_kwargs)
-		dataset_average_losses += dataset_average_loss
+		minibatch_loss = loss_function(output, minibatch_y, **loss_function_kwargs)
 		if ("size_average" not in loss_function_kwargs) or loss_function_kwargs["size_average"]:
-			dataset_total_losses += dataset_average_loss.item() * len(dataset_x)
+			minibatch_total_loss += minibatch_loss.item() * len(minibatch_x)
+			minibatch_average_loss += minibatch_loss
 		else:
-			dataset_total_losses += dataset_average_loss.item()
+			minibatch_total_loss += minibatch_loss.item()
+			minibatch_average_loss += minibatch_loss / len(minibatch_x)
 
-	dataset_average_regs = 0
+	minibatch_average_reg = 0
 	for regularizer_function, regularizer_weight in regularizer_functions.items():
-		dataset_average_reg = regularizer_function(network, input=dataset_x, output=output,
-		                                           **regularizer_function_kwargs) * regularizer_weight
-		dataset_average_regs += dataset_average_reg
+		minibatch_reg = regularizer_function(network, input=minibatch_x, output=output,
+		                                     **regularizer_function_kwargs) * regularizer_weight
+
 		if ("size_average" not in regularizer_function_kwargs) or regularizer_function_kwargs[
 			"size_average"]:
-			dataset_total_regs += dataset_average_reg.item() * len(dataset_x)
+			minibatch_total_reg += minibatch_reg.item() * len(minibatch_x)
+			minibatch_average_reg += minibatch_reg
 		else:
-			dataset_total_regs += dataset_average_reg.item()
+			minibatch_total_reg += minibatch_reg.item()
+			minibatch_average_reg += minibatch_reg / len(minibatch_x)
 
-	'''
-	if information_function is not None:
-		batch_info = information_function(output, minibatch_y, **information_function_kwargs).item()
+	for information_function in information_functions:
+		minibatch_info = information_function(output, minibatch_y, **information_function_kwargs)
 		if ("size_average" not in information_function_kwargs) or information_function_kwargs["size_average"]:
-			epoch_info_obj += batch_info * len(minibatch_x)
+			minibatch_total_infos[information_function] += minibatch_info.item() * len(minibatch_x)
 		else:
-			epoch_info_obj += batch_info
-	else:
-		batch_info = 0
-	'''
+			minibatch_total_infos[information_function] += minibatch_info.item()
 
-	dataset_average_obj = dataset_average_losses + dataset_average_regs
-	dataset_average_obj.backward()
+	minibatch_average_obj = minibatch_average_loss + minibatch_average_reg
+	minibatch_average_obj.backward()
 
 	'''
 	if len(optimizer.param_groups[0]['params']) == 1:
@@ -673,29 +240,36 @@ def train_minibatch(network,
 
 	running_time = timeit.default_timer() - running_time
 
-	return running_time, dataset_total_losses, dataset_total_regs
+	return running_time, minibatch_total_loss, minibatch_total_reg, minibatch_total_infos
 
 
-def test_epoch(network,
+def test_epoch(device,
+               network,
                dataset,
+               #
                loss_functions,
                regularizer_functions={},
-               information_function=False,
+               information_functions={},
+               #
                loss_function_kwargs={},
                regularizer_function_kwargs={},
                information_function_kwargs={},
+               #
                minibatch_size=64,
                generative_model=False):
-	# device = torch.device(settings.device)
-
 	network.eval()
 
 	dataset_x, dataset_y = dataset
+
 	number_of_data = dataset_x.shape[0]
 	data_indices = numpy.random.permutation(number_of_data)
 
 	epoch_total_loss = 0.
 	epoch_total_reg = 0.
+	epoch_total_infos = {}
+	for information_function in information_functions:
+		epoch_total_infos[information_function] = 0
+
 	running_time = timeit.default_timer()
 
 	with torch.no_grad():
@@ -708,6 +282,7 @@ def test_epoch(network,
 			minibatch_y = dataset_y[minibatch_indices]
 
 			# data, labels = data.to(device), labels.to(device)
+			minibatch_x, minibatch_y = minibatch_x.to(device), minibatch_y.to(device)
 			output = network(minibatch_x)
 
 			# batch_losses = 0
@@ -729,14 +304,12 @@ def test_epoch(network,
 				else:
 					epoch_total_reg += minibatch_reg.item()
 
-			'''
-			if information_function is not None:
-				batch_info = information_function(output, minibatch_y, **information_function_kwargs).item()
+			for information_function in information_functions:
+				minibatch_info = information_function(output, minibatch_y, **information_function_kwargs)
 				if ("size_average" not in information_function_kwargs) or information_function_kwargs["size_average"]:
-					epoch_info_obj += batch_info * len(minibatch_x)
+					epoch_total_infos[information_function] += minibatch_info.item() * len(minibatch_x)
 				else:
-					epoch_info_obj += batch_info
-			'''
+					epoch_total_infos[information_function] += minibatch_info.item()
 
 			minibatch_start_index += minibatch_size
 
@@ -744,11 +317,151 @@ def test_epoch(network,
 	# epoch_info_obj /= len(dataset_x)
 	epoch_average_loss = epoch_total_loss / len(dataset_x)
 	epoch_average_reg = epoch_total_reg / len(dataset_x)
+	epoch_average_infos = {}
+	for information_function in information_functions:
+		epoch_average_infos[information_function] = epoch_total_infos[information_function] / len(dataset_x)
 
-	return running_time, epoch_average_loss, epoch_average_reg  # , epoch_info_obj
+	return running_time, epoch_average_loss, epoch_average_reg, epoch_average_infos
 
 
 def train_model(network, settings):
+	input_directory = settings.input_directory
+	output_directory = settings.output_directory
+	assert not os.path.exists(settings.output_directory)
+	os.mkdir(settings.output_directory)
+
+	logging.basicConfig(filename=os.path.join(output_directory, "model.log"), level=logging.DEBUG,
+	                    format='%(asctime)s | %(name)s | %(levelname)s | %(message)s')
+
+	'''
+	train_loader, test_loader = datasets
+	for batch_idx, (data, labels) in enumerate(train_loader):
+		print(type(data), type(labels))
+		print(data.shape, labels.shape)
+	'''
+
+	datasets = load_datasets_to_start(input_directory, output_directory)
+	train_dataset, validate_dataset, test_dataset = datasets
+
+	if porch.debug.subsample_dataset in settings.debug:
+		train_dataset, validate_dataset, test_dataset = porch.debug.subsample_dataset(
+			train_dataset, validate_dataset, test_dataset)
+
+	'''
+	if dataset_preprocessing_function is not None:
+		train_dataset = dataset_preprocessing_function(train_dataset)
+		validate_dataset = dataset_preprocessing_function(validate_dataset)
+		test_dataset = dataset_preprocessing_function(test_dataset)
+	'''
+
+	print("========== ==========", "parameters", "========== ==========")
+	for key, value in list(vars(settings).items()):
+		print("%s=%s" % (key, value))
+	print("========== ==========", "parameters", "========== ==========")
+
+	logger.info("========== ==========" + "parameters" + "========== ==========")
+	for key, value in list(vars(settings).items()):
+		logger.info("%s=%s" % (key, value))
+	logger.info("========== ==========" + "parameters" + "========== ==========")
+
+	# model_file_path = os.path.join(output_directory, 'model-0.pkl')
+	# pickle.dump(network._neural_network, open(model_file_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
+
+	########################
+	# START MODEL TRAINING #
+	########################
+
+	for snapshot_function in settings.snapshot:
+		snapshot_function(network, 0, settings)
+
+	if porch.debug.display_architecture in settings.debug:
+		porch.debug.display_architecture(network)
+	if porch.debug.display_gradient in settings.debug:
+		porch.debug.display_gradient(network)
+
+	network = network.to(settings.device)
+
+	start_train = timeit.default_timer()
+	for epoch_index in range(1, settings.number_of_epochs + 1):
+		# if epoch_index >= 5:
+		# optimizer = settings.optimization(adaptable_params, **settings.optimization_kwargs)
+		# print(optimizer.param_groups[0]['params'])
+
+		network.train(True)
+		optimizer = settings.optimizer(network.parameters(), **settings.optimizer_kwargs)
+		epoch_train_time, epoch_train_loss, epoch_train_reg, epoch_train_infos = train_epoch(
+			device=settings.device,
+			network=network,
+			optimizer=optimizer,
+			dataset=train_dataset,
+			loss_functions=settings.loss,
+			regularizer_functions=settings.regularizer,
+			information_functions=settings.information,
+			loss_function_kwargs=settings.loss_kwargs,
+			regularizer_function_kwargs=settings.regularizer_kwargs,
+			information_function_kwargs=settings.information_kwargs,
+			minibatch_size=settings.minibatch_size,
+		)
+
+		logger.info('train: epoch {}, duration {}s, loss {}, regularizer {}'.format(
+			epoch_index, epoch_train_time, epoch_train_loss, epoch_train_reg))
+		print('train: epoch {}, duration {:.2f}s, loss {:.2f}, regularizer {:.2f}'.format(
+			epoch_index, epoch_train_time, epoch_train_loss, epoch_train_reg))
+
+		for information_function, information_value in epoch_train_infos.items():
+			logger.info('train: epoch {}, {}={}'.format(epoch_index, information_function, information_value))
+			print('train: epoch {}, {}={}'.format(epoch_index, information_function, information_value))
+
+		network.train(False)
+		epoch_test_time, epoch_test_loss, epoch_test_reg, epoch_test_infos = test_epoch(
+			device=settings.device,
+			network=network,
+			dataset=test_dataset,
+			loss_functions=settings.loss,
+			regularizer_functions=settings.regularizer,
+			information_functions=settings.information,
+			loss_function_kwargs=settings.loss_kwargs,
+			regularizer_function_kwargs=settings.regularizer_kwargs,
+			information_function_kwargs=settings.information_kwargs,
+			# generative_model=settings.generative_model
+			minibatch_size=settings.minibatch_size,
+		)
+
+		logger.info('test: epoch {}, duration {}s, loss {}, regularizer {}'.format(
+			epoch_index, epoch_test_time, epoch_test_loss, epoch_test_reg))
+		print('test: epoch {}, duration {:.2f}s, loss {:.2f}, regularizer {:.2f}'.format(
+			epoch_index, epoch_test_time, epoch_test_loss, epoch_test_reg))
+
+		for information_function, information_value in epoch_test_infos.items():
+			logger.info('test: epoch {}, {}={}'.format(epoch_index, information_function, information_value))
+			print('test: epoch {}, {}={}'.format(epoch_index, information_function, information_value))
+
+		# network.train(train_dataset, validate_dataset, test_dataset, settings.minibatch_size, output_directory)
+		# network.epoch_index += 1
+
+		# if settings.snapshot_interval > 0 and network.epoch_index % settings.snapshot_interval == 0:
+		# model_file_path = os.path.join(output_directory, 'model-%d.pkl' % network.epoch_index)
+		# pickle.dump(network, open(model_file_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
+
+		for snapshot_function in settings.snapshot:
+			if epoch_index % settings.snapshot[snapshot_function] == 0:
+				snapshot_function(network, epoch_index, settings)
+
+		print("PROGRESS: {:.2f}%".format(100. * (epoch_index) / settings.number_of_epochs))
+
+	# model_file_path = os.path.join(output_directory, 'model.pkl')
+	# pickle.dump(network._neural_network, open(model_file_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
+
+	end_train = timeit.default_timer()
+
+	print("Optimization complete...")
+	# logger.info("Best validation score of %f%% obtained at epoch %i or minibatch %i" % (
+	# network.best_validate_accuracy * 100., network.best_epoch_index, network.best_minibatch_index))
+	print('The code for file {} ran for {:.2f}m'.format(
+		os.path.split(__file__)[1], (end_train - start_train) / 60.))
+
+
+def train_model_adaptable(network, settings):
 	input_directory = settings.input_directory
 	output_directory = settings.output_directory
 	assert not os.path.exists(settings.output_directory)
@@ -807,15 +520,17 @@ def train_model(network, settings):
 	adaptable_params = []
 	for name, module in network.named_modules():
 		if (type(module) is porch.modules.dropout.AdaptiveBernoulliDropout) or (
-				type(module) is porch.modules.dropout.AdaptiveBernoulliDropoutInLogitSpace):
+				type(module) is porch.modules.dropout.AdaptiveBernoulliDropoutInLogitSpace) or (
+				type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropout) or (
+				type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropoutInLogitSpace):
 			for p in module.parameters():
 				adaptable_params.append(p)
 		elif (type(module) is nn.Linear):
 			for p in module.parameters():
 				trainable_params.append(p)
 
-	optimizer_trainables = settings.optimization(trainable_params, **settings.optimization_kwargs)
-	optimizer_adaptables = settings.optimization(adaptable_params, **settings.optimization_kwargs)
+	optimizer_trainables = settings.optimizer(trainable_params, **settings.optimizer_kwargs)
+	optimizer_adaptables = settings.optimizer(adaptable_params, **settings.optimizer_kwargs)
 
 	start_train = timeit.default_timer()
 	for epoch_index in range(1, settings.number_of_epochs + 1):
@@ -823,9 +538,19 @@ def train_model(network, settings):
 		# optimizer = settings.optimization(adaptable_params, **settings.optimization_kwargs)
 		# print(optimizer.param_groups[0]['params'])
 
+		if epoch_index % 2 == 0:
+			network.train(True)
+			optimizer = optimizer_trainables
+		else:
+			network.train(False)
+			optimizer = optimizer_adaptables
+
+		# optimizer = settings.optimization(network.parameters(), **settings.optimization_kwargs)
+
 		epoch_train_time, epoch_train_loss, epoch_train_reg = train_epoch(
+			device=settings.device,
 			network=network,
-			optimizer=optimizer_trainables if epoch_index % 2 == 0 else optimizer_adaptables,
+			optimizer=optimizer,
 			dataset=train_dataset,
 			loss_functions=settings.loss,
 			regularizer_functions=settings.regularizer,
@@ -842,8 +567,9 @@ def train_model(network, settings):
 			epoch_index, epoch_train_time, epoch_train_loss, epoch_train_reg))
 
 		epoch_test_time, epoch_test_loss, epoch_test_reg = test_epoch(
-			network,
-			test_dataset,
+			device=settings.device,
+			network=network,
+			dataset=test_dataset,
 			loss_functions=settings.loss,
 			minibatch_size=settings.minibatch_size,
 			regularizer_functions=settings.regularizer,
@@ -882,3 +608,26 @@ def train_model(network, settings):
 	# network.best_validate_accuracy * 100., network.best_epoch_index, network.best_minibatch_index))
 	print('The code for file {} ran for {:.2f}m'.format(
 		os.path.split(__file__)[1], (end_train - start_train) / 60.))
+
+
+def start_model():
+	from . import add_generic_options, validate_generic_options
+	model_parser = argparse.ArgumentParser(description="model parser")
+	model_parser = add_generic_options(model_parser)
+	settings, additionals = model_parser.parse_known_args()
+	if len(additionals) > 0:
+		print("========== ==========", "additionals", "========== ==========")
+		for addition in additionals:
+			print("%s" % (addition))
+		print("========== ==========", "additionals", "========== ==========")
+	settings = validate_generic_options(settings)
+	settings.generative_model = False
+
+	torch.manual_seed(settings.random_seed)
+
+	model = settings.model(**settings.model_kwargs).to(settings.device)
+	train_model(model, settings)
+
+
+if __name__ == '__main__':
+	start_model()

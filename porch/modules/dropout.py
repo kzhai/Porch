@@ -8,13 +8,14 @@ __all__ = [
 	"sigmoid",
 	"logit",
 	#
+	"AdaptiveBetaBernoulliDropoutInLogitSpace",
 	"AdaptiveBernoulliDropoutInLogitSpace",
 	"AdaptiveBernoulliDropout",
 	#
 	"GaussianDropout",
 	"LinearAndGaussianDropout",
-	"VariationalDropout",
-	"LinearAndVariationalDropout",
+	"VariationalGaussianDropout",
+	"LinearAndVariationalGaussianDropout",
 ]
 
 
@@ -39,6 +40,133 @@ class AdaptiveBernoulliDropoutInLogitSpace(nn.Module):
 			raise ValueError("dropout probability has to be between 0 and 1, "
 			                 "but got {}".format(p))
 		self.logit_p = nn.Parameter(torch.tensor(logit(p), dtype=torch.float))
+		self.filter = None
+
+	def forward(self, input):
+		if self.logit_p.dim() == 1:
+			p = sigmoid(self.logit_p).expand(input.shape[0], -1)
+		else:
+			p = sigmoid(self.logit_p)
+
+		# return _functions.dropout.Dropout.apply(input, p, self.training)
+
+		self.filter = torch.bernoulli(1 - p)
+		if self.training:
+			return input.mul(self.filter)
+		else:
+			return input.mul(1 - p)
+
+
+class AdaptiveBetaBernoulliDropoutInLogitSpace(AdaptiveBernoulliDropoutInLogitSpace):
+	def __init__(self, p=0.5, alpha=1, beta=1):
+		super(AdaptiveBetaBernoulliDropoutInLogitSpace, self).__init__(p)
+		if numpy.any(p < 0) or numpy.any(p > 1):
+			raise ValueError("dropout probability has to be between 0 and 1, "
+			                 "but got {}".format(p))
+		# self.logit_p = nn.Parameter(torch.tensor(logit(p), dtype=torch.float))
+		# self.filter = None
+		self.hyper_alpha = alpha
+		self.hyper_beta = beta
+
+	def forward(self, input):
+		if self.logit_p.dim() == 1:
+			p = sigmoid(self.logit_p).expand(input.shape[0], -1)
+		else:
+			p = sigmoid(self.logit_p)
+
+		# return _functions.dropout.Dropout.apply(input, p, self.training)
+
+		self.filter = torch.bernoulli(1 - p)
+		if self.training:
+			return input.mul(self.filter)
+		else:
+			return input.mul(1 - p)
+
+
+class AdaptiveBetaBernoulliDropout(nn.Module):
+	def __init__(self, p=0.5):
+		super(AdaptiveBetaBernoulliDropout, self).__init__()
+		if numpy.any(p < 0) or numpy.any(p > 1):
+			raise ValueError("dropout probability has to be between 0 and 1, "
+			                 "but got {} with max {} and min{}".format(p, numpy.max(p), numpy.min(p)))
+		self.p = nn.Parameter(torch.tensor(p, dtype=torch.float))
+		self.filter = None
+
+	def forward(self, input):
+		# if torch.max(self.p) > 1 or torch.min(self.p) < 0:
+		# self.p.data = self.p.data.clamp_(1e-6, 1 - 1e-6)
+		if self.p.dim() == 1:
+			p = self.p.expand(input.shape[0], -1)
+		else:
+			p = self.p
+
+		# return _functions.dropout.Dropout.apply(input, p, self.training)
+
+		self.filter = torch.bernoulli(1 - torch.clamp(p, 0, 1))
+		if self.training:
+			return input.mul(self.filter)
+		else:
+			return input.mul(1 - self.p)
+
+
+class AdaptiveBernoulliDropout(nn.Module):
+	def __init__(self, p=0.5):
+		super(AdaptiveBernoulliDropout, self).__init__()
+		if numpy.any(p < 0) or numpy.any(p > 1):
+			raise ValueError("dropout probability has to be between 0 and 1, "
+			                 "but got {} with max {} and min{}".format(p, numpy.max(p), numpy.min(p)))
+		self.p = nn.Parameter(torch.tensor(p, dtype=torch.float))
+		self.filter = None
+
+	def forward(self, input):
+		if self.p.dim() == 1:
+			p = self.p.expand(input.shape[0], -1)
+		else:
+			p = self.p
+
+		# return _functions.dropout.Dropout.apply(input, p, self.training)
+		# TODO: torch.clamp() function does not properly propagate gradient, so we use two torch.relu() functions.
+		# TODO: optimization with momentum sometimes fails when working with these "clipping" methods.
+		self.filter = torch.bernoulli(torch.relu(1 - torch.relu(p)))
+		if self.training:
+			return input.mul(self.filter)
+		else:
+			return input.mul(torch.relu(1 - torch.relu(p)))
+
+
+class AdaptiveBernoulliDropoutScaleBackup(nn.Module):
+	def __init__(self, p=0.5):
+		super(AdaptiveBernoulliDropoutScaleBackup, self).__init__()
+		if numpy.any(p < 0) or numpy.any(p > 1):
+			raise ValueError("dropout probability has to be between 0 and 1, "
+			                 "but got {} with max {} and min{}".format(p, numpy.max(p), numpy.min(p)))
+		self.p = nn.Parameter(torch.tensor(p, dtype=torch.float))
+
+	def forward(self, input):
+		# if torch.max(self.p) > 1 or torch.min(self.p) < 0:
+		# self.p.data = self.p.data.clamp_(1e-6, 1 - 1e-6)
+		if self.p.dim() == 1:
+			p = self.p.expand(input.shape[0], -1)
+		else:
+			p = self.p
+
+		'''
+		filter = torch.bernoulli(1 - torch.clamp(p, 0, 1))
+		if self.training:
+			return input.div(1 - torch.clamp(p, 0, 1)).mul(filter)
+		else:
+			return input
+		'''
+		return _functions.dropout.Dropout.apply(input, p, self.training)
+
+
+class AdaptiveBernoulliDropoutInLogitSpaceScaleBackup(nn.Module):
+	def __init__(self, p=0.5):
+		super(AdaptiveBernoulliDropoutInLogitSpaceScaleBackup, self).__init__()
+		if numpy.any(p < 0) or numpy.any(p > 1):
+			raise ValueError("dropout probability has to be between 0 and 1, "
+			                 "but got {}".format(p))
+		self.logit_p = nn.Parameter(torch.tensor(logit(p), dtype=torch.float))
 
 	def forward(self, input):
 		if self.logit_p.dim() == 1:
@@ -54,32 +182,6 @@ class AdaptiveBernoulliDropoutInLogitSpace(nn.Module):
 			return input
 		'''
 		return _functions.dropout.Dropout.apply(input, p, self.training)
-
-
-class AdaptiveBernoulliDropout(nn.Module):
-	def __init__(self, p=0.5):
-		super(AdaptiveBernoulliDropout, self).__init__()
-		if numpy.any(p < 0) or numpy.any(p > 1):
-			raise ValueError("dropout probability has to be between 0 and 1, "
-			                 "but got {} with max {} and min{}".format(p, numpy.max(p), numpy.min(p)))
-		self.p = nn.Parameter(torch.tensor(p, dtype=torch.float))
-
-	def forward(self, input):
-		#if torch.max(self.p) > 1 or torch.min(self.p) < 0:
-			#self.p.data = self.p.data.clamp_(1e-6, 1 - 1e-6)
-		if self.p.dim() == 1:
-			p = self.p.expand(input.shape[0], -1)
-		else:
-			p = self.p
-
-
-		filter = torch.bernoulli(1 - torch.clamp(p, 0, 1))
-		if self.training:
-			return input.div(1 - torch.clamp(p, 0, 1)).mul(filter)
-		else:
-			return input
-
-		#return _functions.dropout.Dropout.apply(input, p, self.training)
 
 
 class GaussianDropout(nn.Module):
@@ -174,9 +276,9 @@ def nkld_approximation(log_alpha, sparse=True):
 	return -kld_approx.sum()
 
 
-class VariationalDropout(GaussianDropout):
+class VariationalGaussianDropout(GaussianDropout):
 	def __init__(self, p=0.5, sparse=True):
-		super(VariationalDropout, self).__init__(p)
+		super(VariationalGaussianDropout, self).__init__(p)
 
 		# alpha = p / (1. - p)
 		# self.log_alpha = nn.Parameter(torch.tensor(numpy.log(alpha), dtype=torch.float))
@@ -203,9 +305,9 @@ class VariationalDropout(GaussianDropout):
 	'''
 
 
-class LinearAndVariationalDropout(LinearAndGaussianDropout):
+class LinearAndVariationalGaussianDropout(LinearAndGaussianDropout):
 	def __init__(self, in_features, out_features, p=0.5, bias=True, sparse=True):
-		super(LinearAndVariationalDropout, self).__init__(in_features, out_features, p=p, bias=bias)
+		super(LinearAndVariationalGaussianDropout, self).__init__(in_features, out_features, p=p, bias=bias)
 
 		# alpha = p / (1. - p)
 		# self.log_alpha = nn.Parameter(torch.tensor(numpy.log(alpha), dtype=torch.float))

@@ -2,20 +2,15 @@
 
 from __future__ import print_function
 
-import argparse
 import datetime
 import logging
 import os
-import pickle
-import random
-import sys
-import timeit
-
-import porch
 
 import torch
 import torch.nn
 import torch.nn.functional
+
+import porch
 
 # from lasagne.experiments import debugger
 # from .. import layers, nonlinearities, objectives, updates, Xpolicy, Xregularization
@@ -37,6 +32,7 @@ __all__ = [
 	# "add_resume_options",
 	# "validate_resume_options",
 	#
+	"parse_linear_arguments",
 	# "add_adaptive_options",
 	# "validate_adaptive_options",
 	#
@@ -55,6 +51,7 @@ layer_deliminator = "*"
 param_deliminator = ","
 # param_deliminator = "*"
 specs_deliminator = ":"
+hierarchy_deliminator = "."
 
 
 def parse_parameter_policy(policy_string):
@@ -112,21 +109,15 @@ def add_generic_options(model_parser):
 	                          help="output directory [None]")
 
 	# generic argument set 2
-	model_parser.add_argument("--loss", dest="loss", action='append', default=["nll_loss"],
-	                          help="loss function [nll_loss] defined in porch.loss")
+	model_parser.add_argument("--loss", dest="loss", action='append', default=[],
+	                          help="loss function [None] defined in porch.loss")
 	# model_parser.add_argument("--loss_kwargs", dest='loss_kwargs', action='store', default=None,
 	# help="loss kwargs specified for loss function [None], consult the api for more info")
 	model_parser.add_argument("--regularizer", dest="regularizer", action='append', default=[],
 	                          help="regularizer function [None] defined in porch.regularizer")
-	model_parser.add_argument("--optimization", dest="optimization", action='store', default="SGD",
-	                          help="optimization algorithm [SGD] defined in torch.optim")
-	model_parser.add_argument("--optimization_kwargs", dest='optimization_kwargs', action='store',
-	                          default="lr{}1e-3{}momentum{}0.9".format(specs_deliminator, param_deliminator,
-	                                                                   specs_deliminator),
-	                          help="optimization kwargs specified for optimization algorithm [lr:1e-3,momentum:0.9], consult the api for more info")
-
-	model_parser.add_argument("--information", dest="information", action='store', default=None,
+	model_parser.add_argument("--information", dest='information', action='append', default=[],
 	                          help="information function [None] defined in porch.loss")
+
 	# model_parser.add_argument("--info_kwargs", dest='info_kwargs', action='store', default=None,
 	# help="info kwargs specified for info function [None], consult the api for more info")
 	# model_parser.add_argument("--regularizer", dest='regularizer', action='append', default=[],
@@ -141,6 +132,18 @@ def add_generic_options(model_parser):
 	# help="snapshot interval in number of epochs [0 - no snapshot]")
 
 	# generic argument set 4
+	model_parser.add_argument("--model", dest="model", action='store', default="porch.models.mlp.GenericMLP",
+	                          help="neural network model [porch.mnist.MLP]")
+	model_parser.add_argument("--model_kwargs", dest="model_kwargs", action='store', default="",
+	                          help="model kwargs specified for neural network model [None]")
+
+	model_parser.add_argument("--optimizer", dest="optimizer", action='store', default="SGD",
+	                          help="optimizer algorithm [SGD] defined in torch.optim or porch.optim")
+	model_parser.add_argument("--optimizer_kwargs", dest='optimizer_kwargs', action='store',
+	                          default="lr{}1e-3{}momentum{}0.9".format(specs_deliminator, param_deliminator,
+	                                                                   specs_deliminator),
+	                          help="optimizer kwargs specified for optimization algorithm [lr:1e-3,momentum:0.9], consult the api for more info")
+
 	# model_parser.add_argument("--learning_rate", dest="learning_rate", type=float, action='store', default=1e-2,
 	# help="learning rate [1e-2]")
 	# model_parser.add_argument("--momentum", dest="momentum", type=float, action='store', default=0.9,
@@ -234,18 +237,40 @@ def validate_generic_options(arguments):
 	arguments.regularizer = regularizers
 	arguments.regularizer_kwargs = {}
 
-	arguments.optimization = getattr(torch.optim, arguments.optimization)
-	optimization_kwargs = {}
-	optimization_kwargs_tokens = arguments.optimization_kwargs.split(param_deliminator)
-	for optimization_kwargs_token in optimization_kwargs_tokens:
-		key_value_pair = optimization_kwargs_token.split(specs_deliminator)
-		assert len(key_value_pair) == 2
-		optimization_kwargs[key_value_pair[0]] = float(key_value_pair[1])
-	arguments.optimization_kwargs = optimization_kwargs
-
-	if arguments.information is not None:
-		arguments.information = getattr(porch.loss, arguments.information)
+	informations = {}
+	for information_weight_mapping in arguments.information:
+		fields = information_weight_mapping.split(specs_deliminator)
+		information_function = getattr(porch.loss, fields[0])
+		if len(fields) == 1:
+			informations[information_function] = 1.0
+		elif len(fields) == 2:
+			informations[information_function] = float(fields[1])
+		else:
+			logger.error("unrecognized information function setting %s..." % (information_weight_mapping))
+	arguments.information = informations
 	arguments.information_kwargs = {}
+
+	# generic argument set 4
+	arguments.model = eval(arguments.model)
+	model_kwargs = {}
+	model_kwargs_tokens = arguments.model_kwargs.split(param_deliminator)
+	for model_kwargs_token in model_kwargs_tokens:
+		if model_kwargs_token == "":
+			continue
+		key_value_pair = model_kwargs_token.split(specs_deliminator)
+		assert len(key_value_pair) == 2
+		model_kwargs[key_value_pair[0]] = key_value_pair[1]
+	arguments.model_kwargs = model_kwargs
+
+	# arguments.optimizer = getattr(torch.optim, arguments.optimizer)
+	arguments.optimizer = getattr(porch.optim, arguments.optimizer)
+	optimizer_kwargs = {}
+	optimizer_kwargs_tokens = arguments.optimizer_kwargs.split(param_deliminator)
+	for optimizer_kwargs_token in optimizer_kwargs_tokens:
+		key_value_pair = optimizer_kwargs_token.split(specs_deliminator)
+		assert len(key_value_pair) == 2
+		optimizer_kwargs[key_value_pair[0]] = float(key_value_pair[1])
+	arguments.optimizer_kwargs = optimizer_kwargs
 
 	# if arguments.subparser_name == "resume":
 	#	arguments = validate_resume_arguments(arguments)
@@ -333,6 +358,118 @@ def add_adaptive_options(model_parser):
 	# action='store', default=1, help="adatable update interval [1]")
 
 	return model_parser
+
+
+def parse_linear_arguments(argument):
+	linear_dimensions = [int(temp) for temp in argument.split(layer_deliminator)]
+	return linear_dimensions
+
+
+def validate_dense_arguments(arguments):
+	# model argument set 1
+	assert arguments.dense_dimensions is not None
+	dense_dimensions = arguments.dense_dimensions.split(layer_deliminator)
+	arguments.dense_dimensions = [int(dimensionality) for dimensionality in dense_dimensions]
+
+	assert arguments.dense_nonlinearities is not None
+	dense_nonlinearities = arguments.dense_nonlinearities.split(layer_deliminator)
+	arguments.dense_nonlinearities = [getattr(nonlinearities, dense_nonlinearity) for dense_nonlinearity in
+	                                  dense_nonlinearities]
+
+	assert len(arguments.dense_nonlinearities) == len(arguments.dense_dimensions)
+
+	return arguments, len(arguments.dense_dimensions)
+
+
+def validate_dropout_init_arguments(arguments, number_of_layers):
+	layer_activation_styles = arguments.layer_activation_styles
+	layer_activation_style_tokens = layer_activation_styles.split(layer_deliminator)
+	if len(layer_activation_style_tokens) == 1:
+		layer_activation_styles = [layer_activation_styles for layer_index in range(number_of_layers)]
+	elif len(layer_activation_style_tokens) == number_of_layers:
+		layer_activation_styles = layer_activation_style_tokens
+	# [float(layer_activation_parameter) for layer_activation_parameter in layer_activation_parameter_tokens]
+	assert len(layer_activation_styles) == number_of_layers
+	assert (layer_activation_style in {"uniform", "bernoulli", "beta_bernoulli", "reciprocal_beta_bernoulli",
+	                                   "reverse_reciprocal_beta_bernoulli", "mixed_beta_bernoulli"} for
+	        layer_activation_style in layer_activation_styles)
+	arguments.layer_activation_styles = layer_activation_styles
+
+	layer_activation_parameters = arguments.layer_activation_parameters
+	layer_activation_parameter_tokens = layer_activation_parameters.split(layer_deliminator)
+	if len(layer_activation_parameter_tokens) == 1:
+		layer_activation_parameters = [layer_activation_parameters for layer_index in range(number_of_layers)]
+	elif len(layer_activation_parameter_tokens) == number_of_layers:
+		layer_activation_parameters = layer_activation_parameter_tokens
+	assert len(layer_activation_parameters) == number_of_layers
+
+	for layer_index in range(number_of_layers):
+		if layer_activation_styles[layer_index] == "uniform":
+			layer_activation_parameters[layer_index] = float(layer_activation_parameters[layer_index])
+			assert layer_activation_parameters[layer_index] <= 1
+			assert layer_activation_parameters[layer_index] > 0
+		elif layer_activation_styles[layer_index] == "bernoulli":
+			layer_activation_parameters[layer_index] = float(layer_activation_parameters[layer_index])
+			assert layer_activation_parameters[layer_index] <= 1
+			assert layer_activation_parameters[layer_index] > 0
+		elif layer_activation_styles[layer_index] == "beta_bernoulli" \
+				or layer_activation_styles[layer_index] == "reciprocal_beta_bernoulli" \
+				or layer_activation_styles[layer_index] == "reverse_reciprocal_beta_bernoulli" \
+				or layer_activation_styles[layer_index] == "mixed_beta_bernoulli":
+			layer_activation_parameter_tokens = layer_activation_parameters[layer_index].split("+")
+			assert len(layer_activation_parameter_tokens) == 2, layer_activation_parameter_tokens
+			layer_activation_parameters[layer_index] = (float(layer_activation_parameter_tokens[0]),
+			                                            float(layer_activation_parameter_tokens[1]))
+			assert layer_activation_parameters[layer_index][0] > 0
+			assert layer_activation_parameters[layer_index][1] > 0
+			if layer_activation_styles[layer_index] == "mixed_beta_bernoulli":
+				assert layer_activation_parameters[layer_index][0] < 1
+	arguments.layer_activation_parameters = layer_activation_parameters
+
+	return arguments
+
+
+def validate_dropout_arguments(arguments, number_of_layers):
+	# model argument set
+	layer_activation_types = arguments.layer_activation_types
+	if layer_activation_types is None:
+		layer_activation_types = ["BernoulliDropoutLayer"] * number_of_layers
+	else:
+		layer_activation_type_tokens = layer_activation_types.split(layer_deliminator)
+		if len(layer_activation_type_tokens) == 1:
+			layer_activation_types = layer_activation_type_tokens * number_of_layers
+		else:
+			layer_activation_types = layer_activation_type_tokens
+		assert len(layer_activation_types) == number_of_layers
+	assert layer_activation_types[0] not in {"FastDropoutLayer", "VariationalDropoutTypeBLayer"}
+	for layer_activation_type_index in range(len(layer_activation_types)):
+		if layer_activation_types[layer_activation_type_index] in {"BernoulliDropoutLayer", "GaussianDropoutLayer",
+		                                                           "FastDropoutLayer"}:
+			pass
+		elif layer_activation_types[layer_activation_type_index] in {"VariationalDropoutLayer",
+		                                                             "VariationalDropoutTypeALayer",
+		                                                             "VariationalDropoutTypeBLayer"}:
+			if Xregularization.kl_divergence_kingma not in arguments.regularizer:
+				arguments.regularizer[Xregularization.kl_divergence_kingma] = [1.0, Xpolicy.constant]
+			assert Xregularization.kl_divergence_kingma in arguments.regularizer
+		elif layer_activation_types[layer_activation_type_index] in {"SparseVariationalDropoutLayer"}:
+			if Xregularization.kl_divergence_sparse not in arguments.regularizer:
+				arguments.regularizer[Xregularization.kl_divergence_sparse] = [1.0, Xpolicy.constant]
+			assert Xregularization.kl_divergence_sparse in arguments.regularizer
+		elif layer_activation_types[layer_activation_type_index] in {"AdaptiveDropoutLayer", "DynamicDropoutLayer"}:
+			if (Xregularization.rademacher_p_2_q_2 not in arguments.regularizer) and \
+					(Xregularization.rademacher_p_inf_q_1 not in arguments.regularizer):
+				arguments.regularizer[Xregularization.rademacher] = [1.0, Xpolicy.constant]
+			assert (Xregularization.rademacher_p_2_q_2 in arguments.regularizer) or \
+			       (Xregularization.rademacher_p_inf_q_1 in arguments.regularizer)
+		else:
+			logger.error("unrecognized dropout type %s..." % (layer_activation_types[layer_activation_type_index]))
+		layer_activation_types[layer_activation_type_index] = getattr(layers, layer_activation_types[
+			layer_activation_type_index])
+	arguments.layer_activation_types = layer_activation_types
+
+	arguments = validate_dropout_init_arguments(arguments, number_of_layers)
+	return arguments
 
 
 def validate_adaptive_options(arguments):

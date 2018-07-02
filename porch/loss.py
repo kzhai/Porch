@@ -1,14 +1,6 @@
-import argparse
-import datetime
 import logging
-import pickle
-import os
-import random
-import sys
-import timeit
 
 import numpy
-
 import torch
 import torch.nn.functional
 
@@ -21,17 +13,19 @@ __all__ = [
 	"mse_loss",
 
 	"binary_cross_entropy",
+	"cross_entropy",
 ]
 
 nll_loss = torch.nn.functional.nll_loss
 l1_loss = torch.nn.functional.l1_loss
 mse_loss = torch.nn.functional.mse_loss
 binary_cross_entropy = torch.nn.functional.binary_cross_entropy
+cross_entropy = torch.nn.functional.cross_entropy
 
 
 # Reconstruction + KL divergence losses summed over all elements and batch
 def vae_loss(input, target, size_average=True):
-	data, mean, log_variance  = input
+	data, mean, log_variance = input
 	if size_average:
 		BCE = binary_cross_entropy(data, target, size_average=size_average) * len(data)
 	else:
@@ -44,6 +38,7 @@ def vae_loss(input, target, size_average=True):
 	KLD = -0.5 * torch.sum(1 + log_variance - mean.pow(2) - log_variance.exp())
 
 	return BCE + KLD
+
 
 def accuracy(input, target, weight=None, size_average=True):
 	r"""The categorical accuracy.
@@ -76,15 +71,15 @@ def accuracy(input, target, weight=None, size_average=True):
 
 	if input.size(0) != target.size(0):
 		raise ValueError('Expected input batch_size ({}) to match target batch_size ({}).'
-						 .format(input.size(0), target.size(0)))
+		                 .format(input.size(0), target.size(0)))
 
 	assert (weight is None) and (dim == 2)
 
-	predictions = input.max(1, keepdim=True)[1]	 # get the index of the max log-probability
+	predictions = input.max(1, keepdim=True)[1]  # get the index of the max log-probability
 	accuracy = predictions.eq(target.view_as(predictions)).sum()
 
 	if size_average:
-		#print(accuracy, type(accuracy),accuracy.dtype ,1. * accuracy.div(input.size(0)))
+		# print(accuracy, type(accuracy),accuracy.dtype ,1. * accuracy.div(input.size(0)))
 		return accuracy.to(torch.float).div(input.size(0))
 
 	return accuracy
@@ -107,8 +102,10 @@ def accuracy(input, target, weight=None, size_average=True):
 		return out.view(out_size)
 	'''
 
+
 def test(a, lr=0.1, mo=0.2):
 	print(a, lr, mo)
+
 
 if __name__ == '__main__':
 	a = numpy.random.random();

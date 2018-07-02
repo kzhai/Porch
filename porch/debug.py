@@ -240,12 +240,12 @@ def snapshot_dropout(network, epoch_index, settings=None, **kwargs):
 	for name, module in network.named_modules():
 		# if (type(module) is nn.Dropout) or (type(module) is nn.Dropout2d) or (type(module) is nn.Dropout3d):
 		# layer_retain_probability = 1 - module.p
-		if (type(module) is porch.modules.AdaptiveBernoulliDropoutInLogitSpace):
+		if isinstance(module, porch.modules.AdaptiveBernoulliDropoutInLogitSpace):
 			layer_retain_probability = 1. - sigmoid(module.logit_p).data.numpy()
 		elif (type(module) is porch.modules.AdaptiveBernoulliDropout):
 			layer_retain_probability = 1. - module.p.data.numpy()
-		elif (type(module) is porch.modules.VariationalDropout) or \
-				(type(module) is porch.modules.LinearAndVariationalDropout):
+		elif (type(module) is porch.modules.VariationalGaussianDropout) or \
+				(type(module) is porch.modules.LinearAndVariationalGaussianDropout):
 			layer_retain_probability = 1. / (1. + numpy.exp(module.log_alpha.data.numpy()))
 		elif (type(module) is porch.modules.GaussianDropout) or \
 				(type(module) is porch.modules.LinearAndGaussianDropout):

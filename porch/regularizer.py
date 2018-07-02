@@ -1,7 +1,5 @@
 import logging
 
-import numpy
-
 import torch
 import torch.nn.functional
 
@@ -11,15 +9,15 @@ from porch.modules.dropout import sigmoid
 logger = logging.getLogger(__name__)
 
 __all__ = [
-	"vardrop_kld_approximation",
+	"variational_gaussian_dropout",
 ]
 
 
-def vardrop_kld_approximation(network, input=None, output=None, sparse=True):
+def variational_gaussian_dropout(network, input=None, output=None, sparse=True):
 	kld_approximation = torch.zeros(1)
 	for name, module in network.named_modules():
-		if (type(module) is porch.modules.dropout.VariationalDropout) or \
-				(type(module) is porch.modules.dropout.LinearAndVariationalDropout):
+		if (type(module) is porch.modules.dropout.VariationalGaussianDropout) or \
+				(type(module) is porch.modules.dropout.LinearAndVariationalGaussianDropout):
 			if sparse:
 				k1 = 0.63576
 				k2 = 1.8732
@@ -46,33 +44,38 @@ def vardrop_kld_approximation(network, input=None, output=None, sparse=True):
 	return kld_approximation.sum() / input.size(0)
 
 
-def vardrop_(network, input=None, output=None):
+def variational_bernoulli_dropout(network, input=None, output=None):
 	variational_lower_bound = torch.zeros(1)
 	for name, module in network.named_modules():
-		if (type(module) is porch.modules.dropout.AdaptiveBernoulliDropoutInLogitSpace) or \
-				(type(module) is porch.modules.dropout.AdaptiveBernoulliDropout):
-			# mask_counts = module.p * input.size(0)
-			if (type(module) is porch.modules.dropout.AdaptiveBernoulliDropoutInLogitSpace):
-				p = sigmoid(module.logit_p)
-			elif (type(module) is porch.modules.dropout.AdaptiveBernoulliDropout):
-				p = module.p
+		if (type(module) is porch.modules.dropout.AdaptiveBernoulliDropout):
+			p = module.p
+			filter = module.filter
+			E_log_p_theta = 0
+		elif (type(module) is porch.modules.dropout.AdaptiveBernoulliDropoutInLogitSpace):
+			p = sigmoid(module.logit_p)
+			filter = module.filter
+			E_log_p_theta = 0
+		elif (type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropout):
+			p = module.p
+			filter = module.filter
+			E_log_p_theta = input.size(0) * (
+						(module.hyper_alpha - 1) * torch.log(1 - p) + (module.hyper_beta - 1) * torch.log(p))
+		elif (type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropoutInLogitSpace):
+			p = sigmoid(module.logit_p)
+			filter = module.filter
+			E_log_p_theta = input.size(0) * (
+						(module.hyper_alpha - 1) * torch.log(1 - p) + (module.hyper_beta - 1) * torch.log(p))
+		else:
+			continue
 
-			# TODO: This is only an approximation, using expectation on the draws to reduce the memory usage.
-			E_log_p_dropout = torch.log(p) * p * input.size(0) + torch.log(1 - p) * (1 - p) * input.size(0)
+		# if filter is None:
+		# return 0
 
-			E_log_q_dropout = - torch.log(p) * p - torch.log(1 - p) * (1 - p)
+		assert filter.shape[0] == input.size(0), (filter, input)
+		filter = torch.sum(filter, dim=0)
+		E_log_p_z = torch.log(p) * (input.size(0) - filter) + torch.log(1 - p) * filter
+		E_log_q_z = - torch.log(p) * p - torch.log(1 - p) * (1 - p)
 
-			variational_lower_bound += E_log_p_dropout.sum() + E_log_q_dropout.sum()
+		variational_lower_bound += E_log_p_z.sum() + E_log_q_z.sum() + E_log_p_theta.sum()
 
 	return -variational_lower_bound.sum() / input.size(0)
-
-
-def vardrop_kld_approximation_deprecated(network, input=None, output=None):
-	kld_approximation = torch.zeros(1)
-	for name, module in network.named_modules():
-		if (type(module) is porch.modules.dropout.VariationalDropout) or \
-				(type(module) is porch.modules.dropout.LinearAndVariationalDropout):
-			kld_approximation += module.nkld_approximation()
-
-	kld_approximation /= output.size(1)
-	return kld_approximation.sum() / input.size(0)
