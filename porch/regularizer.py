@@ -17,7 +17,7 @@ def variational_gaussian_dropout(network, input=None, output=None, sparse=True):
 	kld_approximation = torch.zeros(1)
 	for name, module in network.named_modules():
 		if (type(module) is porch.modules.dropout.VariationalGaussianDropout) or \
-				(type(module) is porch.modules.dropout.LinearAndVariationalGaussianDropout):
+				(type(module) is porch.modules.dropout.LinearAndVariationalGaussianDropoutWang):
 			if sparse:
 				k1 = 0.63576
 				k2 = 1.8732
@@ -47,24 +47,24 @@ def variational_gaussian_dropout(network, input=None, output=None, sparse=True):
 def variational_bernoulli_dropout(network, input=None, output=None):
 	variational_lower_bound = torch.zeros(1)
 	for name, module in network.named_modules():
-		if (type(module) is porch.modules.dropout.AdaptiveBernoulliDropout):
+		if (type(module) is porch.modules.dropout.AdaptiveBernoulliDropoutBackup):
 			p = module.p
 			filter = module.filter
-			E_log_p_theta = 0
-		elif (type(module) is porch.modules.dropout.AdaptiveBernoulliDropoutInLogitSpace):
+			E_log_p_theta = torch.tensor(0, dtype=torch.float)
+		elif (type(module) is porch.modules.dropout.AdaptiveBernoulliDropout):
 			p = sigmoid(module.logit_p)
 			filter = module.filter
-			E_log_p_theta = 0
+			E_log_p_theta = torch.tensor(0, dtype=torch.float)
+		elif (type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropoutBackup):
+			p = module.p
+			filter = module.filter
+			E_log_p_theta = input.size(0) * (
+					(module.hyper_alpha - 1) * torch.log(1 - p) + (module.hyper_beta - 1) * torch.log(p))
 		elif (type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropout):
-			p = module.p
-			filter = module.filter
-			E_log_p_theta = input.size(0) * (
-						(module.hyper_alpha - 1) * torch.log(1 - p) + (module.hyper_beta - 1) * torch.log(p))
-		elif (type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropoutInLogitSpace):
 			p = sigmoid(module.logit_p)
 			filter = module.filter
 			E_log_p_theta = input.size(0) * (
-						(module.hyper_alpha - 1) * torch.log(1 - p) + (module.hyper_beta - 1) * torch.log(p))
+					(module.hyper_alpha - 1) * torch.log(1 - p) + (module.hyper_beta - 1) * torch.log(p))
 		else:
 			continue
 

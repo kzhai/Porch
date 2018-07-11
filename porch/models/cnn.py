@@ -4,8 +4,11 @@ import numpy
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
 
+import porch
+import porch.modules
 from porch import layer_deliminator
-from .parser import parse_to_int_sequence, parse_to_float_sequence, parse_activations, parse_pool_modes
+from .parser import parse_to_int_sequence, parse_to_float_sequence, parse_activations, parse_pool_modes, \
+	parse_drop_modes
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +24,9 @@ class Generic2DCNN(nn.Module):
 	             conv_strides,  # ="1",
 	             conv_paddings,  # ="0",
 	             #
+	             conv_drop_modes,
+	             conv_drop_rates,
+	             #
 	             conv_activations,  # ="None",
 	             #
 	             pool_modes,  # ="None",
@@ -29,6 +35,8 @@ class Generic2DCNN(nn.Module):
 	             #
 	             linear_dimensions,
 	             linear_activations,  # ="None",
+	             #
+	             linear_drop_modes,
 	             linear_drop_rates,  # ="0.0"
 	             ):
 		super(Generic2DCNN, self).__init__()
@@ -40,6 +48,10 @@ class Generic2DCNN(nn.Module):
 			feature_shape = feature_shape
 		elif len(feature_shape):
 			feature_shape = feature_shape[1:]
+
+		#
+		#
+		#
 
 		conv_channels = parse_to_int_sequence(string_of_ints=conv_channels)
 
@@ -56,10 +68,32 @@ class Generic2DCNN(nn.Module):
 			conv_paddings = conv_paddings * (len(conv_channels) - 1)
 		assert (len(conv_channels) == len(conv_paddings) + 1)
 
+		#
+		#
+		#
+
+		conv_drop_modes = parse_drop_modes(drop_modes_argument=conv_drop_modes)
+		if len(conv_drop_modes) == 1:
+			conv_drop_modes = conv_drop_modes * (len(conv_channels) - 1)
+		assert (len(conv_channels) == len(conv_drop_modes) + 1)
+
+		conv_drop_rates = parse_to_float_sequence(string_of_float=conv_drop_rates)
+		if len(conv_drop_rates) == 1:
+			conv_drop_rates = conv_drop_rates * (len(conv_channels) - 1)
+		assert (len(conv_channels) == len(conv_drop_rates) + 1)
+
+		#
+		#
+		#
+
 		conv_activations = parse_activations(activations_argument=conv_activations)
 		if len(conv_activations) == 1:
 			conv_activations = conv_activations * (len(conv_channels) - 1)
 		assert (len(conv_channels) == len(conv_activations) + 1)
+
+		#
+		#
+		#
 
 		pool_kernel_sizes = parse_to_int_sequence(string_of_ints=pool_kernel_sizes, default=0)
 		assert (len(conv_channels) == len(pool_kernel_sizes) + 1)
@@ -74,8 +108,14 @@ class Generic2DCNN(nn.Module):
 			pool_strides = pool_strides * (len(conv_channels) - 1)
 		assert (len(conv_channels) == len(pool_strides) + 1)
 
+		#
+		#
+		#
+
 		layers = []
-		for x in range(len(conv_kernel_sizes)):
+		for x in range(len(conv_channels) - 1):
+			if (conv_drop_modes[x] is not None) and (conv_drop_rates[x] > 0):
+				layers.append(conv_drop_modes[x](p=conv_drop_rates[x]))
 			layers.append(nn.Conv2d(conv_channels[x], conv_channels[x + 1], kernel_size=conv_kernel_sizes[x],
 			                        stride=conv_strides[x], padding=conv_paddings[x]))
 			feature_shape = [(temp_shape + 2 * conv_paddings[x] - conv_kernel_sizes[x]) // conv_strides[x] + 1 for
@@ -90,6 +130,10 @@ class Generic2DCNN(nn.Module):
 			                 feature_shape]
 		self.features = nn.Sequential(*layers)
 
+		#
+		#
+		#
+
 		linear_dimensions = parse_to_int_sequence(string_of_ints=linear_dimensions)
 		linear_dimensions.insert(0, numpy.prod(feature_shape) * conv_channels[-1])
 
@@ -98,16 +142,29 @@ class Generic2DCNN(nn.Module):
 			linear_activations = linear_activations * (len(linear_dimensions) - 1)
 		assert (len(linear_dimensions) == len(linear_activations) + 1)
 
+		#
+		#
+		#
+
+		linear_drop_modes = parse_drop_modes(drop_modes_argument=linear_drop_modes)
+		if len(linear_drop_modes) == 1:
+			linear_drop_modes = linear_drop_modes * (len(linear_dimensions) - 1)
+		assert (len(linear_dimensions) == len(linear_drop_modes) + 1)
+
 		linear_drop_rates = parse_to_float_sequence(string_of_float=linear_drop_rates)
 		if len(linear_drop_rates) == 1:
 			linear_drop_rates = linear_drop_rates * (len(linear_dimensions) - 1)
 		assert (len(linear_dimensions) == len(linear_drop_rates) + 1)
 
+		#
+		#
+		#
+
 		layers = []
-		for x in range(len(linear_drop_rates)):
+		for x in range(len(linear_dimensions) - 1):
 			assert 0 <= linear_drop_rates[x] < 1
-			if linear_drop_rates[x] > 0:
-				layers.append(nn.Dropout(p=linear_drop_rates[x]))
+			if (linear_drop_modes[x] is not None) and (linear_drop_rates[x] > 0):
+				layers.append(linear_drop_modes[x](p=linear_drop_rates[x]))
 			layers.append(nn.Linear(linear_dimensions[x], linear_dimensions[x + 1]))
 			if linear_activations[x] is not None:
 				layers.append(linear_activations[x]())
@@ -131,6 +188,9 @@ class CNN_test(Generic2DCNN):
 			conv_strides=layer_deliminator.join(["1", "1"]),
 			conv_paddings=layer_deliminator.join(["2", "2"]),
 			#
+			conv_drop_modes=layer_deliminator.join([]),
+			conv_drop_rates=layer_deliminator.join([]),
+			#
 			conv_activations=layer_deliminator.join(["ReLU", "ReLU"]),
 			#
 			pool_modes=layer_deliminator.join(["MaxPool2d", "MaxPool2d"]),
@@ -138,6 +198,7 @@ class CNN_test(Generic2DCNN):
 			pool_strides=layer_deliminator.join(["2", "2"]),
 			#
 			linear_dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
+			linear_drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, "None"]),
 			linear_drop_rates=layer_deliminator.join(["0.5", "0.0"]),
 			linear_activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
 		)
@@ -154,6 +215,9 @@ class CNN_80sec(Generic2DCNN):
 			conv_strides=layer_deliminator.join(["1", "1", "1"]),
 			conv_paddings=layer_deliminator.join(["2", "2", "2"]),
 			#
+			conv_drop_modes=layer_deliminator.join([]),
+			conv_drop_rates=layer_deliminator.join([]),
+			#
 			conv_activations=layer_deliminator.join(["ReLU", "ReLU", "ReLU"]),
 			#
 			pool_kernel_sizes=layer_deliminator.join(["3", "3", "3"]),
@@ -161,7 +225,7 @@ class CNN_80sec(Generic2DCNN):
 			pool_strides=layer_deliminator.join(["2", "2", "2"]),
 			#
 			linear_dimensions=layer_deliminator.join(["64", "%s" % output_shape]),
-			#
+			linear_drop_modes=layer_deliminator.join(["None", "None"]),
 			linear_drop_rates=layer_deliminator.join(["0.0", "0.0"]),
 			linear_activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
 		)
@@ -178,6 +242,9 @@ class CNN_11pts(Generic2DCNN):
 			conv_strides=layer_deliminator.join(["1", "1", "1", "1"]),
 			conv_paddings=layer_deliminator.join(["2", "2", "1", "1"]),
 			#
+			conv_drop_modes=layer_deliminator.join([]),
+			conv_drop_rates=layer_deliminator.join([]),
+			#
 			conv_activations=layer_deliminator.join(["ReLU", "ReLU", "ReLU", "ReLU"]),
 			#
 			pool_modes=layer_deliminator.join(["MaxPool2d", "MaxPool2d", "None", "None"]),
@@ -185,6 +252,7 @@ class CNN_11pts(Generic2DCNN):
 			pool_strides=layer_deliminator.join(["2", "2", "0", "0"]),
 			#
 			linear_dimensions=layer_deliminator.join(["%s" % output_shape]),
+			linear_drop_modes=layer_deliminator.join(["None"]),
 			linear_drop_rates=layer_deliminator.join(["0.0"]),
 			linear_activations=layer_deliminator.join(["LogSoftmax"]),
 		)
@@ -201,6 +269,9 @@ class AlexNet(Generic2DCNN):
 			conv_strides=layer_deliminator.join(["4", "1", "1", "1", "1"]),
 			conv_paddings=layer_deliminator.join(["2", "2", "1", "1", "1"]),
 			#
+			conv_drop_modes=layer_deliminator.join([]),
+			conv_drop_rates=layer_deliminator.join([]),
+			#
 			conv_activations=layer_deliminator.join(["ReLU", "ReLU", "ReLU", "ReLU", "ReLU"]),
 			#
 			pool_modes=layer_deliminator.join(["MaxPool2d", "MaxPool2d", "None", "None", "MaxPool2d"]),
@@ -208,7 +279,7 @@ class AlexNet(Generic2DCNN):
 			pool_strides=layer_deliminator.join(["2", "2", "0", "0", "2"]),
 			#
 			linear_dimensions=layer_deliminator.join(["4096", "4096", "%s" % output_shape]),
-			#
+			linear_drop_modes=layer_deliminator.join(["Dropout", "Dropout", "None"]),
 			linear_drop_rates=layer_deliminator.join(["0.5", "0.5", "0.0"]),
 			linear_activations=layer_deliminator.join(["ReLU", "ReLU", "LogSoftmax"]),
 		)

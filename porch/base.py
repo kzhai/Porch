@@ -28,7 +28,7 @@ def load_data(input_directory, dataset="test"):
 	data_set_x = torch.from_numpy(data_set_x)
 	data_set_y = torch.from_numpy(data_set_y).to(torch.int64)
 	assert len(data_set_x) == len(data_set_y)
-	logger.info("successfully load %d %s data from %s..." % (len(data_set_x), dataset, input_directory))
+	logger.info("Successfully load %d %s data from %s..." % (len(data_set_x), dataset, input_directory))
 	return (data_set_x, data_set_y)
 
 
@@ -49,15 +49,12 @@ def load_datasets_to_start(input_directory, output_directory, number_of_validate
 		train_set_x = total_data_x[train_indices]
 		train_set_y = total_data_y[train_indices]
 		train_dataset = (train_set_x, train_set_y)
-		logger.info("successfully load data %s with %d to train..." % (input_directory, len(train_set_x)))
+		logger.info("Successfully load data %s with %d to train..." % (input_directory, len(train_set_x)))
 
 		validate_set_x = total_data_x[validate_indices]
 		validate_set_y = total_data_y[validate_indices]
 		validate_dataset = (validate_set_x, validate_set_y)
-		logger.info("successfully load data %s with %d to validate..." % (input_directory, len(validate_set_x)))
-	# if len(validate_indices) > 0:
-	# else:
-	# validate_dataset = None
+		logger.info("Successfully load data %s with %d to validate..." % (input_directory, len(validate_set_x)))
 	else:
 		train_dataset = load_data(input_directory, dataset="train")
 		validate_dataset = load_data(input_directory, dataset="validate")
@@ -281,8 +278,36 @@ def test_epoch(device,
 			minibatch_x = dataset_x[minibatch_indices, :]
 			minibatch_y = dataset_y[minibatch_indices]
 
-			# data, labels = data.to(device), labels.to(device)
-			minibatch_x, minibatch_y = minibatch_x.to(device), minibatch_y.to(device)
+			data_minibatch = (minibatch_x, minibatch_y)
+
+			test_minibatch_output = test_minibatch(device=device,
+			                                       network=network,
+			                                       # optimizer=optimizer,
+			                                       dataset=data_minibatch,
+			                                       #
+			                                       loss_functions=loss_functions,
+			                                       regularizer_functions=regularizer_functions,
+			                                       information_functions=information_functions,
+			                                       #
+			                                       loss_function_kwargs=loss_function_kwargs,
+			                                       regularizer_function_kwargs=regularizer_function_kwargs,
+			                                       information_function_kwargs=information_function_kwargs
+			                                       )
+
+			minibatch_time, minibatch_total_loss, minibatch_total_reg, minibatch_total_infos = test_minibatch_output
+
+			epoch_total_loss += minibatch_total_loss
+			epoch_total_reg += minibatch_total_reg
+			for information_function in information_functions:
+				epoch_total_infos[information_function] += minibatch_total_infos[information_function]
+
+			#
+			#
+			#
+			#
+			#
+
+			'''
 			output = network(minibatch_x)
 
 			# batch_losses = 0
@@ -310,6 +335,7 @@ def test_epoch(device,
 					epoch_total_infos[information_function] += minibatch_info.item() * len(minibatch_x)
 				else:
 					epoch_total_infos[information_function] += minibatch_info.item()
+			'''
 
 			minibatch_start_index += minibatch_size
 
@@ -324,28 +350,61 @@ def test_epoch(device,
 	return running_time, epoch_average_loss, epoch_average_reg, epoch_average_infos
 
 
-def train_model(network, settings):
-	input_directory = settings.input_directory
-	output_directory = settings.output_directory
-	assert not os.path.exists(settings.output_directory)
-	os.mkdir(settings.output_directory)
+def test_minibatch(device,
+                   network,
+                   dataset,
+                   #
+                   loss_functions,
+                   regularizer_functions={},
+                   information_functions={},
+                   #
+                   loss_function_kwargs={},
+                   regularizer_function_kwargs={},
+                   information_function_kwargs={}
+                   ):
+	network.eval()
 
-	logging.basicConfig(filename=os.path.join(output_directory, "model.log"), level=logging.DEBUG,
-	                    format='%(asctime)s | %(name)s | %(levelname)s | %(message)s')
+	minibatch_x, minibatch_y = dataset
+	minibatch_x, minibatch_y = minibatch_x.to(device), minibatch_y.to(device)
 
-	'''
-	train_loader, test_loader = datasets
-	for batch_idx, (data, labels) in enumerate(train_loader):
-		print(type(data), type(labels))
-		print(data.shape, labels.shape)
-	'''
+	running_time = timeit.default_timer()
+	output = network(minibatch_x)
 
-	datasets = load_datasets_to_start(input_directory, output_directory)
-	train_dataset, validate_dataset, test_dataset = datasets
+	minibatch_total_loss = 0
+	minibatch_total_reg = 0
+	minibatch_total_infos = {}
+	for information_function in information_functions:
+		minibatch_total_infos[information_function] = 0
 
-	if porch.debug.subsample_dataset in settings.debug:
-		train_dataset, validate_dataset, test_dataset = porch.debug.subsample_dataset(
-			train_dataset, validate_dataset, test_dataset)
+	for loss_function in loss_functions:
+		minibatch_loss = loss_function(output, minibatch_y, **loss_function_kwargs)
+		# batch_losses += batch_loss
+		if ("size_average" not in loss_function_kwargs) or loss_function_kwargs["size_average"]:
+			minibatch_total_loss += minibatch_loss.item() * len(minibatch_x)
+		else:
+			minibatch_total_loss += minibatch_loss.item()
+
+	for regularizer_function, regularizer_weight in regularizer_functions.items():
+		minibatch_reg = regularizer_function(network, input=minibatch_x, output=output,
+		                                     **regularizer_function_kwargs) * regularizer_weight
+		# batch_regs += batch_reg
+		if ("size_average" not in regularizer_function_kwargs) or regularizer_function_kwargs["size_average"]:
+			minibatch_total_reg += minibatch_reg.item() * len(minibatch_x)
+		else:
+			minibatch_total_reg += minibatch_reg.item()
+
+	for information_function in information_functions:
+		minibatch_info = information_function(output, minibatch_y, **information_function_kwargs)
+		if ("size_average" not in information_function_kwargs) or information_function_kwargs["size_average"]:
+			minibatch_total_infos[information_function] += minibatch_info.item() * len(minibatch_x)
+		else:
+			minibatch_total_infos[information_function] += minibatch_info.item()
+
+	return running_time, minibatch_total_loss, minibatch_total_reg, minibatch_total_infos
+
+
+def train_model(network, dataset, settings):
+	train_dataset, validate_dataset, test_dataset = dataset
 
 	'''
 	if dataset_preprocessing_function is not None:
@@ -353,16 +412,6 @@ def train_model(network, settings):
 		validate_dataset = dataset_preprocessing_function(validate_dataset)
 		test_dataset = dataset_preprocessing_function(test_dataset)
 	'''
-
-	print("========== ==========", "parameters", "========== ==========")
-	for key, value in list(vars(settings).items()):
-		print("%s=%s" % (key, value))
-	print("========== ==========", "parameters", "========== ==========")
-
-	logger.info("========== ==========" + "parameters" + "========== ==========")
-	for key, value in list(vars(settings).items()):
-		logger.info("%s=%s" % (key, value))
-	logger.info("========== ==========" + "parameters" + "========== ==========")
 
 	# model_file_path = os.path.join(output_directory, 'model-0.pkl')
 	# pickle.dump(network._neural_network, open(model_file_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
@@ -381,7 +430,6 @@ def train_model(network, settings):
 
 	network = network.to(settings.device)
 
-	start_train = timeit.default_timer()
 	for epoch_index in range(1, settings.number_of_epochs + 1):
 		# if epoch_index >= 5:
 		# optimizer = settings.optimization(adaptable_params, **settings.optimization_kwargs)
@@ -449,40 +497,17 @@ def train_model(network, settings):
 
 		print("PROGRESS: {:.2f}%".format(100. * (epoch_index) / settings.number_of_epochs))
 
-	# model_file_path = os.path.join(output_directory, 'model.pkl')
+	model_file = os.path.join(settings.output_directory, 'model.pth')
 	# pickle.dump(network._neural_network, open(model_file_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
+	torch.save(network.state_dict(), model_file)
+	logger.info('Successfully saved model state to {}'.format(model_file))
+	print('Successfully saved model state to {}'.format(model_file))
 
-	end_train = timeit.default_timer()
-
-	print("Optimization complete...")
-	# logger.info("Best validation score of %f%% obtained at epoch %i or minibatch %i" % (
-	# network.best_validate_accuracy * 100., network.best_epoch_index, network.best_minibatch_index))
-	print('The code for file {} ran for {:.2f}m'.format(
-		os.path.split(__file__)[1], (end_train - start_train) / 60.))
+	return
 
 
-def train_model_adaptable(network, settings):
-	input_directory = settings.input_directory
-	output_directory = settings.output_directory
-	assert not os.path.exists(settings.output_directory)
-	os.mkdir(settings.output_directory)
-
-	logging.basicConfig(filename=os.path.join(output_directory, "model.log"), level=logging.DEBUG,
-	                    format='%(asctime)s | %(name)s | %(levelname)s | %(message)s')
-
-	'''
-	train_loader, test_loader = datasets
-	for batch_idx, (data, labels) in enumerate(train_loader):
-		print(type(data), type(labels))
-		print(data.shape, labels.shape)
-	'''
-
-	datasets = load_datasets_to_start(input_directory, output_directory)
-	train_dataset, validate_dataset, test_dataset = datasets
-
-	if porch.debug.subsample_dataset in settings.debug:
-		train_dataset, validate_dataset, test_dataset = porch.debug.subsample_dataset(
-			train_dataset, validate_dataset, test_dataset)
+def train_adaptive_model(network, dataset, settings):
+	train_dataset, validate_dataset, test_dataset = dataset
 
 	'''
 	if dataset_preprocessing_function is not None:
@@ -490,16 +515,6 @@ def train_model_adaptable(network, settings):
 		validate_dataset = dataset_preprocessing_function(validate_dataset)
 		test_dataset = dataset_preprocessing_function(test_dataset)
 	'''
-
-	print("========== ==========", "parameters", "========== ==========")
-	for key, value in list(vars(settings).items()):
-		print("%s=%s" % (key, value))
-	print("========== ==========", "parameters", "========== ==========")
-
-	logger.info("========== ==========" + "parameters" + "========== ==========")
-	for key, value in list(vars(settings).items()):
-		logger.info("%s=%s" % (key, value))
-	logger.info("========== ==========" + "parameters" + "========== ==========")
 
 	# model_file_path = os.path.join(output_directory, 'model-0.pkl')
 	# pickle.dump(network._neural_network, open(model_file_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
@@ -516,13 +531,15 @@ def train_model_adaptable(network, settings):
 	if porch.debug.display_gradient in settings.debug:
 		porch.debug.display_gradient(network)
 
+	network = network.to(settings.device)
+
 	trainable_params = []
 	adaptable_params = []
 	for name, module in network.named_modules():
-		if (type(module) is porch.modules.dropout.AdaptiveBernoulliDropout) or (
-				type(module) is porch.modules.dropout.AdaptiveBernoulliDropoutInLogitSpace) or (
-				type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropout) or (
-				type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropoutInLogitSpace):
+		if (type(module) is porch.modules.dropout.AdaptiveBernoulliDropout) or \
+				(type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropout):
+			# or (type(module) is porch.modules.dropout.AdaptiveBernoulliDropoutBackup)
+			# or (type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropoutBackup)
 			for p in module.parameters():
 				adaptable_params.append(p)
 		elif (type(module) is nn.Linear):
@@ -532,7 +549,6 @@ def train_model_adaptable(network, settings):
 	optimizer_trainables = settings.optimizer(trainable_params, **settings.optimizer_kwargs)
 	optimizer_adaptables = settings.optimizer(adaptable_params, **settings.optimizer_kwargs)
 
-	start_train = timeit.default_timer()
 	for epoch_index in range(1, settings.number_of_epochs + 1):
 		# if epoch_index >= 5:
 		# optimizer = settings.optimization(adaptable_params, **settings.optimization_kwargs)
@@ -545,19 +561,19 @@ def train_model_adaptable(network, settings):
 			network.train(False)
 			optimizer = optimizer_adaptables
 
-		# optimizer = settings.optimization(network.parameters(), **settings.optimization_kwargs)
-
-		epoch_train_time, epoch_train_loss, epoch_train_reg = train_epoch(
+		# network.train(True)
+		# optimizer = settings.optimizer(network.parameters(), **settings.optimizer_kwargs)
+		epoch_train_time, epoch_train_loss, epoch_train_reg, epoch_train_infos = train_epoch(
 			device=settings.device,
 			network=network,
 			optimizer=optimizer,
 			dataset=train_dataset,
 			loss_functions=settings.loss,
 			regularizer_functions=settings.regularizer,
-			# information_function=settings.information,
+			information_functions=settings.information,
 			loss_function_kwargs=settings.loss_kwargs,
 			regularizer_function_kwargs=settings.regularizer_kwargs,
-			# information_function_kwargs=settings.information_kwargs,
+			information_function_kwargs=settings.information_kwargs,
 			minibatch_size=settings.minibatch_size,
 		)
 
@@ -566,24 +582,33 @@ def train_model_adaptable(network, settings):
 		print('train: epoch {}, duration {:.2f}s, loss {:.2f}, regularizer {:.2f}'.format(
 			epoch_index, epoch_train_time, epoch_train_loss, epoch_train_reg))
 
-		epoch_test_time, epoch_test_loss, epoch_test_reg = test_epoch(
+		for information_function, information_value in epoch_train_infos.items():
+			logger.info('train: epoch {}, {}={}'.format(epoch_index, information_function, information_value))
+			print('train: epoch {}, {}={}'.format(epoch_index, information_function, information_value))
+
+		network.train(False)
+		epoch_test_time, epoch_test_loss, epoch_test_reg, epoch_test_infos = test_epoch(
 			device=settings.device,
 			network=network,
 			dataset=test_dataset,
 			loss_functions=settings.loss,
-			minibatch_size=settings.minibatch_size,
 			regularizer_functions=settings.regularizer,
-			# information_function=settings.information,
+			information_functions=settings.information,
 			loss_function_kwargs=settings.loss_kwargs,
 			regularizer_function_kwargs=settings.regularizer_kwargs,
-			# information_function_kwargs=settings.information_kwargs,
+			information_function_kwargs=settings.information_kwargs,
 			# generative_model=settings.generative_model
+			minibatch_size=settings.minibatch_size,
 		)
 
 		logger.info('test: epoch {}, duration {}s, loss {}, regularizer {}'.format(
 			epoch_index, epoch_test_time, epoch_test_loss, epoch_test_reg))
 		print('test: epoch {}, duration {:.2f}s, loss {:.2f}, regularizer {:.2f}'.format(
 			epoch_index, epoch_test_time, epoch_test_loss, epoch_test_reg))
+
+		for information_function, information_value in epoch_test_infos.items():
+			logger.info('test: epoch {}, {}={}'.format(epoch_index, information_function, information_value))
+			print('test: epoch {}, {}={}'.format(epoch_index, information_function, information_value))
 
 		# network.train(train_dataset, validate_dataset, test_dataset, settings.minibatch_size, output_directory)
 		# network.epoch_index += 1
@@ -598,17 +623,21 @@ def train_model_adaptable(network, settings):
 
 		print("PROGRESS: {:.2f}%".format(100. * (epoch_index) / settings.number_of_epochs))
 
-	# model_file_path = os.path.join(output_directory, 'model.pkl')
+	model_file = os.path.join(settings.output_directory, 'model.pth')
 	# pickle.dump(network._neural_network, open(model_file_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
+	torch.save(network.state_dict(), model_file)
 
-	end_train = timeit.default_timer()
+	logger.info('Successfully saved model state to {}'.format(model_file))
+	print('Successfully saved model state to {}'.format(model_file))
 
-	print("Optimization complete...")
-	# logger.info("Best validation score of %f%% obtained at epoch %i or minibatch %i" % (
-	# network.best_validate_accuracy * 100., network.best_epoch_index, network.best_minibatch_index))
-	print('The code for file {} ran for {:.2f}m'.format(
-		os.path.split(__file__)[1], (end_train - start_train) / 60.))
+	return
 
+
+#
+#
+#
+#
+#
 
 def start_model():
 	from . import add_generic_options, validate_generic_options
@@ -623,10 +652,50 @@ def start_model():
 	settings = validate_generic_options(settings)
 	settings.generative_model = False
 
+	# input_directory = settings.input_directory
+	# output_directory = settings.output_directory
+	assert not os.path.exists(settings.output_directory)
+	os.mkdir(settings.output_directory)
+
+	logging.basicConfig(filename=os.path.join(settings.output_directory, "model.log"), level=logging.DEBUG,
+	                    format='%(asctime)s | %(name)s | %(levelname)s | %(message)s')
+
+	print("========== ==========", "parameters", "========== ==========")
+	for key, value in list(vars(settings).items()):
+		print("%s=%s" % (key, value))
+	print("========== ==========", "parameters", "========== ==========")
+
+	logger.info("========== ==========" + "parameters" + "========== ==========")
+	for key, value in list(vars(settings).items()):
+		logger.info("%s=%s" % (key, value))
+	logger.info("========== ==========" + "parameters" + "========== ==========")
+
 	torch.manual_seed(settings.random_seed)
 
 	model = settings.model(**settings.model_kwargs).to(settings.device)
-	train_model(model, settings)
+	if settings.model_directory is None:
+		dataset = load_datasets_to_start(input_directory=settings.input_directory,
+		                                 output_directory=settings.output_directory)
+	else:
+		model_file = os.path.join(settings.model_directory, "model.pth")
+		model.load_state_dict(torch.load(model_file))
+		logger.info('Successfully load model state from {}'.format(model_file))
+		print('Successfully load model state from {}'.format(model_file))
+
+		dataset = load_datasets_to_resume(input_directory=settings.input_directory,
+		                                  model_directory=settings.model_directory,
+		                                  output_directory=settings.output_directory)
+
+	if porch.debug.subsample_dataset in settings.debug:
+		dataset = porch.debug.subsample_dataset(dataset)
+
+	start_train = timeit.default_timer()
+	# train_model(model, dataset, settings)
+	train_adaptive_model(model, dataset, settings)
+	end_train = timeit.default_timer()
+
+	print("Optimization complete...")
+	print('The code for file {} ran for {:.2f}m'.format(os.path.split(__file__)[1], (end_train - start_train) / 60.))
 
 
 if __name__ == '__main__':

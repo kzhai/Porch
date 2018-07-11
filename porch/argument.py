@@ -107,6 +107,8 @@ def add_generic_options(model_parser):
 	                          help="input directory [None]")
 	model_parser.add_argument("--output_directory", dest="output_directory", action='store', default=None,
 	                          help="output directory [None]")
+	model_parser.add_argument("--model_directory", dest="model_directory", action='store', default=None,
+	                          help="model directory [None, resume mode if specified]")
 
 	# generic argument set 2
 	model_parser.add_argument("--loss", dest="loss", action='append', default=[],
@@ -156,7 +158,7 @@ def add_generic_options(model_parser):
 	'''
 
 	# model_parser.add_argument('--device', dest="device", action='store', default="cuda", help='device [cuda]')
-	model_parser.add_argument('--random_seed', type=int, default=0, help='random seed (default: 0)')
+	model_parser.add_argument('--random_seed', type=int, default=-1, help='random seed (default: -1=time)')
 
 	model_parser.add_argument("--snapshot", dest='snapshot', action='append', default=[],
 	                          help="snapshot function [None]")
@@ -179,6 +181,9 @@ def validate_generic_options(arguments):
 	arguments.device = torch.device(arguments.device)
 
 	# generic argument set snapshots
+	if arguments.random_seed < 0:
+		arguments.random_seed = datetime.datetime.now().microsecond
+
 	snapshots = {}
 	for snapshot_interval_mapping in arguments.snapshot:
 		fields = snapshot_interval_mapping.split(specs_deliminator)
@@ -262,8 +267,8 @@ def validate_generic_options(arguments):
 		model_kwargs[key_value_pair[0]] = key_value_pair[1]
 	arguments.model_kwargs = model_kwargs
 
-	# arguments.optimizer = getattr(torch.optim, arguments.optimizer)
-	arguments.optimizer = getattr(porch.optim, arguments.optimizer)
+	arguments.optimizer = getattr(torch.optim, arguments.optimizer)
+	# arguments.optimizer = getattr(porch.optim, arguments.optimizer)
 	optimizer_kwargs = {}
 	optimizer_kwargs_tokens = arguments.optimizer_kwargs.split(param_deliminator)
 	for optimizer_kwargs_token in optimizer_kwargs_tokens:
@@ -271,9 +276,6 @@ def validate_generic_options(arguments):
 		assert len(key_value_pair) == 2
 		optimizer_kwargs[key_value_pair[0]] = float(key_value_pair[1])
 	arguments.optimizer_kwargs = optimizer_kwargs
-
-	# if arguments.subparser_name == "resume":
-	#	arguments = validate_resume_arguments(arguments)
 
 	# generic argument set 1
 	assert os.path.exists(arguments.input_directory)
@@ -290,6 +292,8 @@ def validate_generic_options(arguments):
 	assert not os.path.exists(output_directory)
 	# os.mkdir(os.path.abspath(output_directory))
 	arguments.output_directory = output_directory
+
+	assert (arguments.model_directory is None) or os.path.exists(arguments.model_directory)
 
 	return arguments
 
@@ -316,7 +320,7 @@ def validate_discriminative_options(arguments):
 	assert (arguments.validation_interval > 0)
 
 	return arguments
-'''
+
 
 
 def add_resume_options(model_parser):
@@ -341,6 +345,7 @@ def validate_resume_options(arguments):
 	assert os.path.exists(os.path.join(arguments.model_directory, "validate.index.npy"))
 
 	return arguments
+'''
 
 
 def add_adaptive_options(model_parser):

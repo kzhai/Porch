@@ -1,11 +1,14 @@
 import torch.nn as nn
 
+import porch
 from porch import layer_deliminator
 
 __all__ = [
 	"parse_to_int_sequence",
-	"parse_activations",
 	"parse_to_float_sequence",
+	"parse_activations",
+	"parse_pool_modes",
+	"parse_drop_modes",
 ]
 
 
@@ -45,6 +48,18 @@ def parse_activations(activations_argument):
 	if len(activations) == 0:
 		activations.append(None)
 	return activations
+
+
+def parse_drop_modes(drop_modes_argument):
+	drop_modes = []
+	for drop_mode in drop_modes_argument.split(layer_deliminator):
+		if drop_mode.lower() == "none":
+			drop_modes.append(None)
+		else:
+			drop_modes.append(getattr(porch.modules, drop_mode))
+	if len(drop_modes) == 0:
+		drop_modes.append(None)
+	return drop_modes
 
 
 #

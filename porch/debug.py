@@ -31,7 +31,8 @@ def _subsample_dataset(dataset, fraction=0.01):
 	return dataset_x, dataset_y
 
 
-def subsample_dataset(train_dataset, validate_dataset, test_dataset, fraction=0.01, **kwargs):
+def subsample_dataset(dataset, fraction=0.01, **kwargs):
+	train_dataset, validate_dataset, test_dataset = dataset
 	if validate_dataset is None:
 		size_before = [len(train_dataset[1]), 0, len(test_dataset[1])]
 	else:
@@ -43,9 +44,11 @@ def subsample_dataset(train_dataset, validate_dataset, test_dataset, fraction=0.
 		size_after = [len(train_dataset[1]), 0, len(test_dataset[1])]
 	else:
 		size_after = [len(train_dataset[1]), len(validate_dataset[1]), len(test_dataset[1])]
-	logger.debug("debug: subsample [train, validate, test] sets from %s to %s instances" % (size_before, size_after))
-	print("debug: subsample [train, validate, test] sets from %s to %s instances" % (size_before, size_after))
-	return train_dataset, validate_dataset, test_dataset
+	logger.debug("Debug: subsample [train, validate, test] sets from %s to %s instances" % (size_before, size_after))
+	print("Debug: subsample [train, validate, test] sets from %s to %s instances" % (size_before, size_after))
+
+	dataset = train_dataset, validate_dataset, test_dataset
+	return dataset
 
 
 def display_gradient(network, **kwargs):
@@ -240,15 +243,13 @@ def snapshot_dropout(network, epoch_index, settings=None, **kwargs):
 	for name, module in network.named_modules():
 		# if (type(module) is nn.Dropout) or (type(module) is nn.Dropout2d) or (type(module) is nn.Dropout3d):
 		# layer_retain_probability = 1 - module.p
-		if isinstance(module, porch.modules.AdaptiveBernoulliDropoutInLogitSpace):
+		if isinstance(module, porch.modules.AdaptiveBernoulliDropout):
 			layer_retain_probability = 1. - sigmoid(module.logit_p).data.numpy()
-		elif (type(module) is porch.modules.AdaptiveBernoulliDropout):
-			layer_retain_probability = 1. - module.p.data.numpy()
-		elif (type(module) is porch.modules.VariationalGaussianDropout) or \
-				(type(module) is porch.modules.LinearAndVariationalGaussianDropout):
+		#elif (type(module) is porch.modules.AdaptiveBernoulliDropoutBackup):
+			#layer_retain_probability = 1. - module.p.data.numpy()
+		elif (type(module) is porch.modules.VariationalGaussianDropout):
 			layer_retain_probability = 1. / (1. + numpy.exp(module.log_alpha.data.numpy()))
-		elif (type(module) is porch.modules.GaussianDropout) or \
-				(type(module) is porch.modules.LinearAndGaussianDropout):
+		elif (type(module) is porch.modules.GaussianDropout):
 			layer_retain_probability = 1. / (1. + numpy.exp(module.log_alpha.numpy()))
 		else:
 			continue
