@@ -7,7 +7,9 @@ import torch.nn.functional as F
 import porch
 import porch.modules
 from porch import layer_deliminator
-from porch.models import parse_to_int_sequence, parse_to_float_sequence, parse_activations, parse_drop_modes
+from porch.models import parse_feed_forward_layers
+
+# , parse_to_int_sequence, parse_to_float_sequence, parse_activations, parse_drop_modes
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +25,14 @@ class GenericMLP(nn.Module):
 	             activations,  # ="",
 	             drop_modes,  # ="",
 	             drop_rates,  # =""
+	             *args,
+	             **kwargs
 	             ):
 		super(GenericMLP, self).__init__()
 
 		feature_shape = [int(temp_shape) for temp_shape in input_shape.split(layer_deliminator)]
 
+		'''
 		dimensions = parse_to_int_sequence(string_of_ints=dimensions)
 		dimensions.insert(0, numpy.prod(feature_shape))
 
@@ -54,52 +59,64 @@ class GenericMLP(nn.Module):
 			layers.append(nn.Linear(dimensions[x], dimensions[x + 1]))
 			if activations[x] is not None:
 				layers.append(activations[x]())
+		'''
+
+		layers = parse_feed_forward_layers(
+			input_dimension=numpy.prod(feature_shape),
+			dimensions=dimensions,
+			activations=activations,
+			drop_modes=drop_modes,
+			drop_rates=drop_rates
+		)
 
 		self.classifier = nn.Sequential(*layers)
 
-	def forward(self, x):
+	def forward(self, x, *args, **kwargs):
 		x = x.view(x.size(0), -1)
 		x = self.classifier(x)
 		return x
 
 
 class MLP_test(GenericMLP):
-	def __init__(self, input_shape, output_shape):
+	def __init__(self, input_shape, output_shape, *args, **kwargs):
 		super(MLP_test, self).__init__(
 			input_shape=input_shape,
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
 			activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
 			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, porch.modules.Dropout.__name__]),
-			drop_rates=layer_deliminator.join(["0.2", "0.5"])
+			drop_rates=layer_deliminator.join(["0.2", "0.5"]),
+			*args, **kwargs
 		)
 
 
 class MLP_GaussianDropout_test(GenericMLP):
-	def __init__(self, input_shape, output_shape):
+	def __init__(self, input_shape, output_shape, *args, **kwargs):
 		super(MLP_GaussianDropout_test, self).__init__(
 			input_shape=input_shape,
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
 			activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
 			drop_modes=layer_deliminator.join(
 				[porch.modules.GaussianDropout.__name__, porch.modules.GaussianDropout.__name__]),
-			drop_rates=layer_deliminator.join(["0.2", "0.5"])
+			drop_rates=layer_deliminator.join(["0.2", "0.5"]),
+			*args, **kwargs
 		)
 
 
 class MLP_VariationalGaussianDropout_test(GenericMLP):
-	def __init__(self, input_shape, output_shape):
+	def __init__(self, input_shape, output_shape, *args, **kwargs):
 		super(MLP_VariationalGaussianDropout_test, self).__init__(
 			input_shape=input_shape,
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
 			activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
 			drop_modes=layer_deliminator.join(
 				[porch.modules.VariationalGaussianDropout.__name__, porch.modules.VariationalGaussianDropout.__name__]),
-			drop_rates=layer_deliminator.join(["0.2", "0.5"])
+			drop_rates=layer_deliminator.join(["0.2", "0.5"]),
+			*args, **kwargs
 		)
 
 
 class MLP_AdaptiveBernoulliDropout_test(GenericMLP):
-	def __init__(self, input_shape, output_shape):
+	def __init__(self, input_shape, output_shape, *args, **kwargs):
 		super(MLP_AdaptiveBernoulliDropout_test, self).__init__(
 			input_shape=input_shape,
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
@@ -107,12 +124,13 @@ class MLP_AdaptiveBernoulliDropout_test(GenericMLP):
 			drop_modes=layer_deliminator.join(
 				[porch.modules.AdaptiveBernoulliDropout.__name__,
 				 porch.modules.AdaptiveBernoulliDropout.__name__]),
-			drop_rates=layer_deliminator.join(["0.2", "0.5"])
+			drop_rates=layer_deliminator.join(["0.2", "0.5"]),
+			*args, **kwargs
 		)
 
 
 class MLP_AdaptiveBetaBernoulliDropout_test(GenericMLP):
-	def __init__(self, input_shape, output_shape):
+	def __init__(self, input_shape, output_shape, *args, **kwargs):
 		super(MLP_AdaptiveBetaBernoulliDropout_test, self).__init__(
 			input_shape=input_shape,
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
@@ -120,7 +138,8 @@ class MLP_AdaptiveBetaBernoulliDropout_test(GenericMLP):
 			drop_modes=layer_deliminator.join(
 				[porch.modules.AdaptiveBetaBernoulliDropout.__name__,
 				 porch.modules.AdaptiveBetaBernoulliDropout.__name__]),
-			drop_rates=layer_deliminator.join(["0.2", "0.5"])
+			drop_rates=layer_deliminator.join(["0.2", "0.5"]),
+			*args, **kwargs
 		)
 
 

@@ -1,26 +1,31 @@
+import numpy
 import torch.nn as nn
 
 import porch
 from porch import layer_deliminator
 
 __all__ = [
+	"parse_feed_forward_layers",
+	"parse_recurrent_layers",
+	#
 	"parse_to_int_sequence",
 	"parse_to_float_sequence",
 	"parse_activations",
 	"parse_pool_modes",
 	"parse_drop_modes",
+	"parse_recurrent_modes",
 ]
 
 
 def parse_to_int_sequence(string_of_ints, default=None):
-	sequence_of_ints = [int(temp) for temp in string_of_ints.split(layer_deliminator)]
+	sequence_of_ints = [int(temp) for temp in string_of_ints.split(layer_deliminator) if len(temp) > 0]
 	if (default is not None) and (len(sequence_of_ints) == 0):
 		sequence_of_ints = [default]
 	return sequence_of_ints
 
 
 def parse_to_float_sequence(string_of_float, default_value=None):
-	sequence_of_floats = [float(temp) for temp in string_of_float.split(layer_deliminator)]
+	sequence_of_floats = [float(temp) for temp in string_of_float.split(layer_deliminator) if len(temp) > 0]
 	if (default_value is not None) and (len(sequence_of_floats) == 0):
 		sequence_of_floats = [default_value]
 	return sequence_of_floats
@@ -29,7 +34,7 @@ def parse_to_float_sequence(string_of_float, default_value=None):
 def parse_pool_modes(pool_modes_argument):
 	pool_modes = []
 	for pool_mode in pool_modes_argument.split(layer_deliminator):
-		if pool_mode.lower() == "none":
+		if len(pool_mode) == 0 or pool_mode.lower() == "none":
 			pool_modes.append(None)
 		else:
 			pool_modes.append(getattr(nn, pool_mode))
@@ -41,7 +46,7 @@ def parse_pool_modes(pool_modes_argument):
 def parse_activations(activations_argument):
 	activations = []
 	for activation in activations_argument.split(layer_deliminator):
-		if activation.lower() == "none":
+		if len(activation) == 0 or activation.lower() == "none":
 			activations.append(None)
 		else:
 			activations.append(getattr(nn, activation))
@@ -53,13 +58,109 @@ def parse_activations(activations_argument):
 def parse_drop_modes(drop_modes_argument):
 	drop_modes = []
 	for drop_mode in drop_modes_argument.split(layer_deliminator):
-		if drop_mode.lower() == "none":
+		if len(drop_mode) == 0 or drop_mode.lower() == "none":
 			drop_modes.append(None)
 		else:
 			drop_modes.append(getattr(porch.modules, drop_mode))
 	if len(drop_modes) == 0:
 		drop_modes.append(None)
 	return drop_modes
+
+
+def parse_recurrent_modes(recurrent_modes_argument):
+	recurrent_modes = []
+	for recurrent_mode in recurrent_modes_argument.split(layer_deliminator):
+		if len(recurrent_mode) == 0 or recurrent_mode.lower() == "none":
+			recurrent_modes.append(None)
+		else:
+			recurrent_modes.append(getattr(nn, recurrent_mode))
+	if len(recurrent_modes) == 0:
+		recurrent_modes.append(None)
+	return recurrent_modes
+
+
+#
+#
+#
+#
+#
+
+def parse_feed_forward_layers(input_dimension,
+                              dimensions,
+                              activations,  # ="",
+                              drop_modes,  # ="",
+                              drop_rates,  # =""
+                              ):
+	# feature_shape = [int(temp_shape) for temp_shape in input_dimension.split(layer_deliminator)]
+
+	dimensions = parse_to_int_sequence(string_of_ints=dimensions)
+	dimensions.insert(0, input_dimension)
+
+	activations = parse_activations(activations_argument=activations)
+	if len(activations) == 1:
+		activations = activations * (len(dimensions) - 1)
+	assert (len(dimensions) == len(activations) + 1)
+
+	drop_modes = parse_drop_modes(drop_modes_argument=drop_modes)
+	if len(drop_modes) == 1:
+		drop_modes = drop_modes * (len(dimensions) - 1)
+	assert (len(dimensions) == len(drop_modes) + 1)
+
+	drop_rates = parse_to_float_sequence(string_of_float=drop_rates, default_value=0)
+	if len(drop_rates) == 1:
+		drop_rates = drop_rates * (len(dimensions) - 1)
+	assert (len(dimensions) == len(drop_rates) + 1)
+
+	layers = []
+	for x in range(len(dimensions) - 1):
+		assert 0 <= drop_rates[x] < 1
+		if (drop_modes[x] is not None) and (drop_rates[x] > 0):
+			layers.append(drop_modes[x](p=numpy.ones(dimensions[x]) * drop_rates[x]))
+		layers.append(nn.Linear(dimensions[x], dimensions[x + 1]))
+		if activations[x] is not None:
+			layers.append(activations[x]())
+
+	return layers
+
+
+def parse_recurrent_layers(input_dimension,
+                           dimensions,
+                           activations,  # ="",
+                           recurrent_modes,
+                           drop_modes,  # ="",
+                           drop_rates,  # =""
+                           ):
+	dimensions = parse_to_int_sequence(string_of_ints=dimensions)
+	dimensions.insert(0, input_dimension)
+
+	activations = parse_activations(activations_argument=activations)
+	assert (len(dimensions) == len(activations) + 1)
+
+	recurrent_modes = parse_recurrent_modes(recurrent_modes_argument=recurrent_modes)
+	assert (len(dimensions) == len(recurrent_modes) + 1)
+
+	drop_modes = parse_drop_modes(drop_modes_argument=drop_modes)
+	assert (len(dimensions) == len(drop_modes) + 1)
+
+	drop_rates = parse_to_float_sequence(string_of_float=drop_rates, default_value=0)
+	assert (len(dimensions) == len(drop_rates) + 1)
+
+	layers = []
+	for x in range(len(dimensions) - 1):
+		assert 0 <= drop_rates[x] < 1
+		if (drop_modes[x] is not None) and (drop_rates[x] > 0):
+			layers.append(drop_modes[x](p=numpy.ones(dimensions[x]) * drop_rates[x]))
+
+		if recurrent_modes[x] is not None:
+			assert activations[x] is None
+			assert drop_modes[x + 1] is None
+			layers.append(recurrent_modes[x](dimensions[x], dimensions[x + 1], dropout=drop_rates[x + 1]))
+		else:
+			layers.append(nn.Linear(dimensions[x], dimensions[x + 1]))
+			if activations[x] is not None:
+				layers.append(activations[x]())
+
+	return layers
 
 
 #

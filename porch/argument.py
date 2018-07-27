@@ -2,6 +2,7 @@
 
 from __future__ import print_function
 
+import collections
 import datetime
 import logging
 import os
@@ -122,8 +123,6 @@ def add_generic_options(model_parser):
 
 	# model_parser.add_argument("--info_kwargs", dest='info_kwargs', action='store', default=None,
 	# help="info kwargs specified for info function [None], consult the api for more info")
-	# model_parser.add_argument("--regularizer", dest='regularizer', action='append', default=[],
-	# help="regularizer function [None] defined in regularization.py")
 
 	# generic argument set 3
 	model_parser.add_argument("--minibatch_size", dest="minibatch_size", type=int, action='store', default=-1,
@@ -145,6 +144,14 @@ def add_generic_options(model_parser):
 	                          default="lr{}1e-3{}momentum{}0.9".format(specs_deliminator, param_deliminator,
 	                                                                   specs_deliminator),
 	                          help="optimizer kwargs specified for optimization algorithm [lr:1e-3,momentum:0.9], consult the api for more info")
+
+	# generic argument set 5
+	model_parser.add_argument("--data", dest='data', action='append', default=[],
+	                          help="data preprocess function [None] defined in porch.data")
+	model_parser.add_argument("--train_kwargs", dest='train_kwargs', action='store',
+	                          default="", help="kwargs specified for model training")
+	model_parser.add_argument("--test_kwargs", dest='test_kwargs', action='store',
+	                          default="", help="kwargs specified for model testing")
 
 	# model_parser.add_argument("--learning_rate", dest="learning_rate", type=float, action='store', default=1e-2,
 	# help="learning rate [1e-2]")
@@ -260,7 +267,7 @@ def validate_generic_options(arguments):
 	model_kwargs = {}
 	model_kwargs_tokens = arguments.model_kwargs.split(param_deliminator)
 	for model_kwargs_token in model_kwargs_tokens:
-		if model_kwargs_token == "":
+		if len(model_kwargs_token) == 0:
 			continue
 		key_value_pair = model_kwargs_token.split(specs_deliminator)
 		assert len(key_value_pair) == 2
@@ -276,6 +283,39 @@ def validate_generic_options(arguments):
 		assert len(key_value_pair) == 2
 		optimizer_kwargs[key_value_pair[0]] = float(key_value_pair[1])
 	arguments.optimizer_kwargs = optimizer_kwargs
+
+	# generic argument set 5
+	data = collections.OrderedDict()
+	for data_function_params_mapping in arguments.data:
+		fields = data_function_params_mapping.split(param_deliminator)
+		data_function = getattr(porch.data, fields[0])
+		data_function_params = {}
+		for param_value in fields[1:]:
+			param_value_fields = param_value.split(specs_deliminator)
+			assert (len(param_value_fields) == 2)
+			data_function_params[param_value_fields[0]] = param_value_fields[1]
+		data[data_function] = data_function_params
+	arguments.data = data
+
+	train_kwargs = {}
+	train_kwargs_tokens = arguments.train_kwargs.split(param_deliminator)
+	for train_kwargs_token in train_kwargs_tokens:
+		if len(train_kwargs_token) == 0:
+			continue
+		key_value_pair = train_kwargs_token.split(specs_deliminator)
+		assert len(key_value_pair) == 2
+		train_kwargs[key_value_pair[0]] = key_value_pair[1]
+	arguments.train_kwargs = train_kwargs
+
+	test_kwargs = {}
+	test_kwargs_tokens = arguments.test_kwargs.split(param_deliminator)
+	for test_kwargs_token in test_kwargs_tokens:
+		if len(test_kwargs_token) == 0:
+			continue
+		key_value_pair = test_kwargs_token.split(specs_deliminator)
+		assert len(key_value_pair) == 2
+		test_kwargs[key_value_pair[0]] = key_value_pair[1]
+	arguments.test_kwargs = test_kwargs
 
 	# generic argument set 1
 	assert os.path.exists(arguments.input_directory)

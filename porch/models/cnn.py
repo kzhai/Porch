@@ -38,6 +38,7 @@ class Generic2DCNN(nn.Module):
 	             #
 	             linear_drop_modes,
 	             linear_drop_rates,  # ="0.0"
+	             *args, **kwargs
 	             ):
 		super(Generic2DCNN, self).__init__()
 
@@ -77,7 +78,7 @@ class Generic2DCNN(nn.Module):
 			conv_drop_modes = conv_drop_modes * (len(conv_channels) - 1)
 		assert (len(conv_channels) == len(conv_drop_modes) + 1)
 
-		conv_drop_rates = parse_to_float_sequence(string_of_float=conv_drop_rates)
+		conv_drop_rates = parse_to_float_sequence(string_of_float=conv_drop_rates, default_value=0)
 		if len(conv_drop_rates) == 1:
 			conv_drop_rates = conv_drop_rates * (len(conv_channels) - 1)
 		assert (len(conv_channels) == len(conv_drop_rates) + 1)
@@ -171,7 +172,7 @@ class Generic2DCNN(nn.Module):
 
 		self.classifier = nn.Sequential(*layers)
 
-	def forward(self, x):
+	def forward(self, x, *args, **kwargs):
 		x = self.features(x)
 		x = x.view(x.size(0), -1)
 		x = self.classifier(x)
@@ -179,11 +180,11 @@ class Generic2DCNN(nn.Module):
 
 
 class CNN_test(Generic2DCNN):
-	def __init__(self, input_shape, output_shape):
+	def __init__(self, input_shape, input_channel, output_shape, *args, **kwargs):
 		super(CNN_test, self).__init__(
 			input_shape="%s" % (input_shape),
 			#
-			conv_channels=layer_deliminator.join(["3", "32", "64"]),
+			conv_channels=layer_deliminator.join(["%d" % int(input_channel), "32", "64"]),
 			conv_kernel_sizes=layer_deliminator.join(["5", "5"]),
 			conv_strides=layer_deliminator.join(["1", "1"]),
 			conv_paddings=layer_deliminator.join(["2", "2"]),
@@ -201,17 +202,18 @@ class CNN_test(Generic2DCNN):
 			linear_drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, "None"]),
 			linear_drop_rates=layer_deliminator.join(["0.5", "0.0"]),
 			linear_activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
+			#
+			*args, **kwargs
 		)
 
 
 class CNN_80sec(Generic2DCNN):
-	def __init__(self, input_shape, output_shape):
+	def __init__(self, input_shape, output_shape, *args, **kwargs):
 		super(CNN_80sec, self).__init__(
 			input_shape="%s" % (input_shape),
 			#
 			conv_channels=layer_deliminator.join(["3", "32", "32", "64"]),
 			conv_kernel_sizes=layer_deliminator.join(["5", "5", "5"]),
-			#
 			conv_strides=layer_deliminator.join(["1", "1", "1"]),
 			conv_paddings=layer_deliminator.join(["2", "2", "2"]),
 			#
@@ -228,11 +230,13 @@ class CNN_80sec(Generic2DCNN):
 			linear_drop_modes=layer_deliminator.join(["None", "None"]),
 			linear_drop_rates=layer_deliminator.join(["0.0", "0.0"]),
 			linear_activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
+			#
+			*args, **kwargs
 		)
 
 
 class CNN_11pts(Generic2DCNN):
-	def __init__(self, input_shape, output_shape):
+	def __init__(self, input_shape, output_shape, *args, **kwargs):
 		super(CNN_11pts, self).__init__(
 			input_shape="%s" % (input_shape),
 			#
@@ -255,11 +259,13 @@ class CNN_11pts(Generic2DCNN):
 			linear_drop_modes=layer_deliminator.join(["None"]),
 			linear_drop_rates=layer_deliminator.join(["0.0"]),
 			linear_activations=layer_deliminator.join(["LogSoftmax"]),
+			#
+			*args, **kwargs
 		)
 
 
 class AlexNet(Generic2DCNN):
-	def __init__(self, input_shape, output_shape):
+	def __init__(self, input_shape, output_shape, *args, **kwargs):
 		super(AlexNet, self).__init__(
 			input_shape="%s" % (input_shape),
 			#
@@ -282,6 +288,8 @@ class AlexNet(Generic2DCNN):
 			linear_drop_modes=layer_deliminator.join(["Dropout", "Dropout", "None"]),
 			linear_drop_rates=layer_deliminator.join(["0.5", "0.5", "0.0"]),
 			linear_activations=layer_deliminator.join(["ReLU", "ReLU", "LogSoftmax"]),
+			#
+			*args, **kwargs
 		)
 
 
