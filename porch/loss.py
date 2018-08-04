@@ -7,6 +7,7 @@ import torch.nn.functional
 logger = logging.getLogger(__name__)
 
 __all__ = [
+
 	"accuracy",
 	"nll_loss",
 	"l1_loss",
@@ -16,11 +17,21 @@ __all__ = [
 	"cross_entropy",
 ]
 
+'''
+	"NLLLoss",
+	"CrossEntropyLoss",
+'''
+
 nll_loss = torch.nn.functional.nll_loss
 l1_loss = torch.nn.functional.l1_loss
 mse_loss = torch.nn.functional.mse_loss
+
 binary_cross_entropy = torch.nn.functional.binary_cross_entropy
 cross_entropy = torch.nn.functional.cross_entropy
+
+
+# NLLLoss=torch.nn.NLLLoss
+# CrossEntropyLoss = torch.nn.CrossEntropyLoss
 
 
 # Reconstruction + KL divergence losses summed over all elements and batch

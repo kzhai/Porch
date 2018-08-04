@@ -37,7 +37,7 @@ python -um porch.base \
 --input_directory=./data/mnist_784/ \
 --output_directory=./data/mnist_784/ \
 --minibatch_size=64 \
---number_of_epochs=100 \
+--number_of_epochs=10 \
 --optimizer_kwargs=lr:1e-3,momentum:0.9 \
 --information=accuracy
 ```
@@ -54,12 +54,12 @@ For example, `porch.models.mlp.MLP_test` extends `porch.models.mlp.GenericMLP` w
 python -um porch.base \
 --model=porch.models.mlp.MLP_test \
 --model_kwargs=input_shape:784,output_shape:10 \
---loss=nll_loss \
+--loss=cross_entropy \
 --data=loadFeatureAndLabel \
 --input_directory=./data/mnist_784/ \
 --output_directory=./data/mnist_784/ \
 --minibatch_size=64 \
---number_of_epochs=100 \
+--number_of_epochs=10 \
 --optimizer_kwargs=lr:1e-3,momentum:0.9 \
 --information=accuracy
 ```
@@ -75,12 +75,12 @@ One testing example, `porch.models.cnn.CNN_test` extends `porch.models.cnn.Gener
 python -um porch.base \
 --model=porch.models.cnn.CNN_test \
 --model_kwargs=input_shape:28*28,input_channel:1,output_shape:10 \
---loss=nll_loss \
+--loss=cross_entropy \
 --data=loadFeatureAndLabel \
 --input_directory=./data/mnist_1x28x28/ \
 --output_directory=./data/mnist_1x28x28/ \
 --minibatch_size=64 \
---number_of_epochs=10 \
+--number_of_epochs=5 \
 --optimizer_kwargs=lr:1e-3,momentum:0.9 \
 --information=accuracy \
 --debug=subsample_dataset
@@ -91,7 +91,7 @@ python -um porch.base \
 ```bash
 python -um porch.base \
 --model=porch.models.rnn.RNN_WordLanguageModel_test \
---model_kwargs=input_shape:33278,embedding_dimension:50,recurrent_dimension:50,output_shape:33278 \
+--model_kwargs=input_shape:33278,embedding_dimension:50,recurrent_dimension:50,drop_rate:0.5,output_shape:33278 \
 --loss=cross_entropy \
 --data=loadSequence \
 --data=toSequenceMinibatch,minibatch_size:20,sequence_length:35 \

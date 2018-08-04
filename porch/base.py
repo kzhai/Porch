@@ -227,7 +227,7 @@ def train_epoch(device,
 			epoch_total_infos[information_function] += minibatch_total_infos[information_function]
 
 		minibatch_start_index += minibatch_size
-		if minibatch_start_index * 100. / number_of_data > progress_marker:
+		if minibatch_start_index * 100. / number_of_data >= progress_marker:
 			print('| {:3.2f}% epoch | {:.2f} ms/minibatch | {:.2f} loss |'.format(
 				minibatch_start_index * 100 / number_of_data,
 				(timeit.default_timer() - epoch_time) * 1000 / (minibatch_start_index / minibatch_size),
@@ -410,7 +410,7 @@ def test_epoch(device,
 
 			minibatch_start_index += minibatch_size
 			'''
-			if minibatch_start_index * 100. / number_of_data > progress_marker:
+			if minibatch_start_index * 100. / number_of_data >= progress_marker:
 				print('| {:3.2f}% epoch | {:.2f} ms/minibatch | {:.2f} loss |'.format(
 					minibatch_start_index * 100 / number_of_data,
 					(timeit.default_timer() - epoch_time) * 1000 / (minibatch_start_index / minibatch_size),
@@ -777,6 +777,9 @@ def start_model():
 
 	if porch.debug.subsample_dataset in settings.debug:
 		dataset = porch.debug.subsample_dataset(dataset)
+
+	if porch.debug.display_architecture in settings.debug:
+		porch.debug.display_architecture(model)
 
 	start_train = timeit.default_timer()
 	train_model(model, dataset, settings)

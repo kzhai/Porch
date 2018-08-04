@@ -127,6 +127,7 @@ def parse_recurrent_layers(input_dimension,
                            dimensions,
                            activations,  # ="",
                            recurrent_modes,
+                           number_of_recurrent_layers,
                            drop_modes,  # ="",
                            drop_rates,  # =""
                            ):
@@ -138,6 +139,9 @@ def parse_recurrent_layers(input_dimension,
 
 	recurrent_modes = parse_recurrent_modes(recurrent_modes_argument=recurrent_modes)
 	assert (len(dimensions) == len(recurrent_modes) + 1)
+
+	number_of_recurrent_layers = parse_to_int_sequence(string_of_ints=number_of_recurrent_layers)
+	assert (len(dimensions) == len(number_of_recurrent_layers) + 1)
 
 	drop_modes = parse_drop_modes(drop_modes_argument=drop_modes)
 	assert (len(dimensions) == len(drop_modes) + 1)
@@ -153,8 +157,11 @@ def parse_recurrent_layers(input_dimension,
 
 		if recurrent_modes[x] is not None:
 			assert activations[x] is None
-			assert drop_modes[x + 1] is None
-			layers.append(recurrent_modes[x](dimensions[x], dimensions[x + 1], dropout=drop_rates[x + 1]))
+			#assert drop_modes[x + 1] is None
+			layers.append(
+				recurrent_modes[x](input_size=dimensions[x], hidden_size=dimensions[x + 1],
+				                   num_layers=number_of_recurrent_layers[x],
+				                   dropout=drop_rates[x + 1]))
 		else:
 			layers.append(nn.Linear(dimensions[x], dimensions[x + 1]))
 			if activations[x] is not None:

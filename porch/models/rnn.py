@@ -27,6 +27,7 @@ class GenericRNN(nn.Module):
 	             dimensions,
 	             activations,  # ="",
 	             recurrent_modes,
+	             number_of_recurrent_layers,
 	             drop_modes,  # ="",
 	             drop_rates,  # =""
 	             #
@@ -50,6 +51,7 @@ class GenericRNN(nn.Module):
 			dimensions=dimensions,
 			activations=activations,
 			recurrent_modes=recurrent_modes,
+			number_of_recurrent_layers=number_of_recurrent_layers,
 			drop_modes=drop_modes,
 			drop_rates=drop_rates
 		)
@@ -59,55 +61,8 @@ class GenericRNN(nn.Module):
 			for name, parameter in layer.named_parameters():
 				self.register_parameter(name, parameter)
 
-		# self.init_weights()
-		# self.forward(x=numpy.zeros((1, 10)))
-
-		'''
-		pre_recurrent_layers = []
-		pre_recurrent_layers.append(nn.Embedding(input_shape, embedding_dimension))
-		pre_recurrent_layers += parse_feed_forward_layers(
-			input_dimension=embedding_dimension,
-			dimensions=pre_recurrent_dimensions,
-			activations=pre_recurrent_activations,
-			drop_modes=pre_recurrent_drop_modes,
-			drop_rates=pre_recurrent_drop_rates
-		)
-
-		#
-		#
-		#
-
-		recurrent_modes = parse_recurrent_modes(recurrent_modes)
-		recurrent_dimensions = parse_to_int_sequence(string_of_ints=recurrent_dimensions)
-		recurrent_dimensions.insert(0, pre_recurrent_layers. pre_recurrent_dimensions[-1])
-
-		recurrent_drop_rates = parse_to_float_sequence(string_of_float=recurrent_drop_rates, default_value=0)
-		if len(recurrent_drop_rates) == 1:
-			recurrent_drop_rates = recurrent_drop_rates * (len(recurrent_dimensions) - 1)
-		assert (len(recurrent_dimensions) == len(recurrent_drop_rates) + 1)
-
-		recurrent_layers = []
-		for x in range(len(recurrent_dimensions) - 1):
-			recurrent_layers.append(
-				recurrent_modes(recurrent_dimensions[x], recurrent_dimensions[x + 1], dropout=recurrent_drop_rates[x]))
-
-		#
-		#
-		#
-
-		post_recurrent_layers = []
-		post_recurrent_layers += parse_feed_forward_layers(
-			input_dimension=recurrent_dimensions[-1],
-			dimensions=post_recurrent_dimensions,
-			activations=post_recurrent_activations,
-			drop_modes=post_recurrent_drop_modes,
-			drop_rates=post_recurrent_drop_rates
-		)
-
-		self.pre_recurrent_layers = pre_recurrent_layers
-		self.recurrent_layers = recurrent_layers
-		self.post_recurrent_layers = post_recurrent_layers
-		'''
+	# self.init_weights()
+	# self.forward(x=numpy.zeros((1, 10)))
 
 	def init_weights(self, init_range=0.1):
 		for layer in self.layers:
@@ -165,7 +120,7 @@ class GenericRNN(nn.Module):
 		return hiddens
 
 
-class RNN_WordLanguageModel_test(GenericRNN):
+class RNN_WordLanguageModel_testbackup(GenericRNN):
 	def __init__(self,
 	             input_shape,
 	             embedding_dimension,
@@ -174,6 +129,50 @@ class RNN_WordLanguageModel_test(GenericRNN):
 	             #
 	             *args, **kwargs
 	             ):
+		super(RNN_WordLanguageModel_testbackup, self).__init__(
+			input_shape=input_shape,
+			embedding_dimension=embedding_dimension,
+			dimensions=layer_deliminator.join(
+				["%s" % recurrent_dimension, "%s" % recurrent_dimension, "%s" % output_shape]),
+			activations=layer_deliminator.join(["None", "None", "LogSoftmax"]),
+			recurrent_modes=layer_deliminator.join([nn.LSTM.__name__, nn.LSTM.__name__, "None"]),
+			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, "None", "None"]),
+			drop_rates=layer_deliminator.join(["0.5", "0.0", "0.0"]),
+			#
+			*args, **kwargs
+		)
+
+
+'''
+@TODO: None+CrossEntropy vs. LogSoftmax+nll_loss (definitely have problem)
+@TODO: Tied weights
+'''
+
+
+class RNN_WordLanguageModel_test(GenericRNN):
+	def __init__(self,
+	             input_shape,
+	             embedding_dimension,
+	             recurrent_dimension,
+	             drop_rate,
+	             output_shape,
+	             #
+	             *args, **kwargs
+	             ):
+		super(RNN_WordLanguageModel_test, self).__init__(
+			input_shape=input_shape,
+			embedding_dimension=embedding_dimension,
+			dimensions=layer_deliminator.join(["%s" % recurrent_dimension, "%s" % output_shape]),
+			activations=layer_deliminator.join(["None", "None"]),
+			recurrent_modes=layer_deliminator.join([nn.LSTM.__name__, "None"]),
+			number_of_recurrent_layers=layer_deliminator.join(["2", "0"]),
+			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, porch.modules.Dropout.__name__]),
+			drop_rates=layer_deliminator.join(["%s" % drop_rate, "%s" % drop_rate]),
+			#
+			*args, **kwargs
+		)
+
+		'''
 		super(RNN_WordLanguageModel_test, self).__init__(
 			input_shape=input_shape,
 			embedding_dimension=embedding_dimension,
@@ -182,7 +181,8 @@ class RNN_WordLanguageModel_test(GenericRNN):
 			activations=layer_deliminator.join(["None", "None", "None"]),
 			recurrent_modes=layer_deliminator.join([nn.LSTM.__name__, nn.LSTM.__name__, "None"]),
 			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, "None", "None"]),
-			drop_rates=layer_deliminator.join(["0.5", "0.0", "0.0"]),
+			drop_rates=layer_deliminator.join(["%s" % drop_rate, "%s" % drop_rate, "0.0"]),
 			#
 			*args, **kwargs
 		)
+		'''

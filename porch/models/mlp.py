@@ -77,12 +77,26 @@ class GenericMLP(nn.Module):
 		return x
 
 
+'''
+class MLP_test2(GenericMLP):
+	def __init__(self, input_shape, output_shape, *args, **kwargs):
+		super(MLP_test2, self).__init__(
+			input_shape=input_shape,
+			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
+			activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
+			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, porch.modules.Dropout.__name__]),
+			drop_rates=layer_deliminator.join(["0.2", "0.5"]),
+			*args, **kwargs
+		)
+'''
+
+
 class MLP_test(GenericMLP):
 	def __init__(self, input_shape, output_shape, *args, **kwargs):
 		super(MLP_test, self).__init__(
 			input_shape=input_shape,
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
-			activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
+			activations=layer_deliminator.join(["ReLU", "None"]),
 			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, porch.modules.Dropout.__name__]),
 			drop_rates=layer_deliminator.join(["0.2", "0.5"]),
 			*args, **kwargs
@@ -94,7 +108,7 @@ class MLP_GaussianDropout_test(GenericMLP):
 		super(MLP_GaussianDropout_test, self).__init__(
 			input_shape=input_shape,
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
-			activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
+			activations=layer_deliminator.join(["ReLU", "None"]),
 			drop_modes=layer_deliminator.join(
 				[porch.modules.GaussianDropout.__name__, porch.modules.GaussianDropout.__name__]),
 			drop_rates=layer_deliminator.join(["0.2", "0.5"]),
@@ -107,7 +121,7 @@ class MLP_VariationalGaussianDropout_test(GenericMLP):
 		super(MLP_VariationalGaussianDropout_test, self).__init__(
 			input_shape=input_shape,
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
-			activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
+			activations=layer_deliminator.join(["ReLU", "None"]),
 			drop_modes=layer_deliminator.join(
 				[porch.modules.VariationalGaussianDropout.__name__, porch.modules.VariationalGaussianDropout.__name__]),
 			drop_rates=layer_deliminator.join(["0.2", "0.5"]),
@@ -120,7 +134,7 @@ class MLP_AdaptiveBernoulliDropout_test(GenericMLP):
 		super(MLP_AdaptiveBernoulliDropout_test, self).__init__(
 			input_shape=input_shape,
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
-			activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
+			activations=layer_deliminator.join(["ReLU", "None"]),
 			drop_modes=layer_deliminator.join(
 				[porch.modules.AdaptiveBernoulliDropout.__name__,
 				 porch.modules.AdaptiveBernoulliDropout.__name__]),
@@ -134,7 +148,7 @@ class MLP_AdaptiveBetaBernoulliDropout_test(GenericMLP):
 		super(MLP_AdaptiveBetaBernoulliDropout_test, self).__init__(
 			input_shape=input_shape,
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
-			activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
+			activations=layer_deliminator.join(["ReLU", "None"]),
 			drop_modes=layer_deliminator.join(
 				[porch.modules.AdaptiveBetaBernoulliDropout.__name__,
 				 porch.modules.AdaptiveBetaBernoulliDropout.__name__]),

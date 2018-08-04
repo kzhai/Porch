@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 
 import numpy
 
@@ -57,8 +58,13 @@ def display_gradient(network, **kwargs):
 
 
 def display_architecture(network, **kwargs):
-	for name, module in network.named_modules():
-		print("debug: architecture: %s" % (module))
+	# for name, module in network.named_modules():
+	# print("debug: architecture: %s" % (module))n
+	print("-" * 100)
+	for layer in network.layers:
+		print("| debug: architecture:", layer)
+	print("-" * 100)
+	sys.exit()
 
 
 def debug_function_output(network, dataset, **kwargs):

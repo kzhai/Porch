@@ -201,7 +201,7 @@ class CNN_test(Generic2DCNN):
 			linear_dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
 			linear_drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, "None"]),
 			linear_drop_rates=layer_deliminator.join(["0.5", "0.0"]),
-			linear_activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
+			linear_activations=layer_deliminator.join(["ReLU", "None"]),
 			#
 			*args, **kwargs
 		)
@@ -229,7 +229,7 @@ class CNN_80sec(Generic2DCNN):
 			linear_dimensions=layer_deliminator.join(["64", "%s" % output_shape]),
 			linear_drop_modes=layer_deliminator.join(["None", "None"]),
 			linear_drop_rates=layer_deliminator.join(["0.0", "0.0"]),
-			linear_activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
+			linear_activations=layer_deliminator.join(["ReLU", "None"]),
 			#
 			*args, **kwargs
 		)
@@ -258,7 +258,7 @@ class CNN_11pts(Generic2DCNN):
 			linear_dimensions=layer_deliminator.join(["%s" % output_shape]),
 			linear_drop_modes=layer_deliminator.join(["None"]),
 			linear_drop_rates=layer_deliminator.join(["0.0"]),
-			linear_activations=layer_deliminator.join(["LogSoftmax"]),
+			linear_activations=layer_deliminator.join(["None"]),
 			#
 			*args, **kwargs
 		)
@@ -287,7 +287,7 @@ class AlexNet(Generic2DCNN):
 			linear_dimensions=layer_deliminator.join(["4096", "4096", "%s" % output_shape]),
 			linear_drop_modes=layer_deliminator.join(["Dropout", "Dropout", "None"]),
 			linear_drop_rates=layer_deliminator.join(["0.5", "0.5", "0.0"]),
-			linear_activations=layer_deliminator.join(["ReLU", "ReLU", "LogSoftmax"]),
+			linear_activations=layer_deliminator.join(["ReLU", "ReLU", "None"]),
 			#
 			*args, **kwargs
 		)
