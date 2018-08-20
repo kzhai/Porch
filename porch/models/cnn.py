@@ -170,6 +170,7 @@ class Generic2DCNN(nn.Module):
 			if linear_activations[x] is not None:
 				layers.append(linear_activations[x]())
 
+		self.layers = layers
 		self.classifier = nn.Sequential(*layers)
 
 	def forward(self, x, *args, **kwargs):

@@ -1,5 +1,6 @@
 import logging
 
+import numpy
 import torch
 import torch.nn as nn
 
@@ -45,7 +46,8 @@ class GenericRNN(nn.Module):
 		#
 
 		layers = []
-		layers.append(nn.Embedding(input_shape, embedding_dimension))
+		layers.append(nn.Embedding(input_shape, embedding_dimension, _weight=torch.Tensor(
+			numpy.random.uniform(-0.1, 0.1, (input_shape, embedding_dimension)))))
 		layers += parse_recurrent_layers(
 			input_dimension=embedding_dimension,
 			dimensions=dimensions,
@@ -57,10 +59,15 @@ class GenericRNN(nn.Module):
 		)
 		self.layers = layers
 
+		for idx, module in enumerate(layers):
+			self.add_module(str(idx), module)
+		#nn.Sequential(*layers)
+
+		'''
 		for layer in self.layers:
 			for name, parameter in layer.named_parameters():
 				self.register_parameter(name, parameter)
-
+		'''
 	# self.init_weights()
 	# self.forward(x=numpy.zeros((1, 10)))
 
@@ -75,6 +82,7 @@ class GenericRNN(nn.Module):
 	def forward(self, x, *args, **kwargs):
 		# This is to recast the data type to long type, as required by embedding layer.
 		x = x.type(torch.long)
+
 		# This is to transpose the minibatch size and sequencen length, to accomodate the bptt algorithm.
 		x = x.transpose(0, 1)
 
@@ -82,6 +90,7 @@ class GenericRNN(nn.Module):
 		if hiddens is None:
 			print("Initialize hiddens to all zeros.")
 			hiddens = self.init_hiddens(x.shape[1])
+			#print("hiddens before", hiddens)
 
 		'''
 		for hidden in hiddens:
@@ -99,6 +108,7 @@ class GenericRNN(nn.Module):
 			else:
 				x = layer(x)
 
+		#print("hiddens after", hiddens)
 		# This is to transpose the minibatch size and sequencen length back, to accomodate the bptt algorithm.
 		x = x.transpose(0, 1)
 		# print("final shape:", x.shape, x.size(0) * x.size(1), x.size(2))
@@ -171,18 +181,3 @@ class RNN_WordLanguageModel_test(GenericRNN):
 			#
 			*args, **kwargs
 		)
-
-		'''
-		super(RNN_WordLanguageModel_test, self).__init__(
-			input_shape=input_shape,
-			embedding_dimension=embedding_dimension,
-			dimensions=layer_deliminator.join(
-				["%s" % recurrent_dimension, "%s" % recurrent_dimension, "%s" % output_shape]),
-			activations=layer_deliminator.join(["None", "None", "None"]),
-			recurrent_modes=layer_deliminator.join([nn.LSTM.__name__, nn.LSTM.__name__, "None"]),
-			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, "None", "None"]),
-			drop_rates=layer_deliminator.join(["%s" % drop_rate, "%s" % drop_rate, "0.0"]),
-			#
-			*args, **kwargs
-		)
-		'''

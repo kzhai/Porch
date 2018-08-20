@@ -116,6 +116,7 @@ def parse_feed_forward_layers(input_dimension,
 		assert 0 <= drop_rates[x] < 1
 		if (drop_modes[x] is not None) and (drop_rates[x] > 0):
 			layers.append(drop_modes[x](p=numpy.ones(dimensions[x]) * drop_rates[x]))
+			#layers.append(drop_modes[x](p=drop_rates[x]))
 		layers.append(nn.Linear(dimensions[x], dimensions[x + 1]))
 		if activations[x] is not None:
 			layers.append(activations[x]())
@@ -156,14 +157,18 @@ def parse_recurrent_layers(input_dimension,
 			layers.append(drop_modes[x](p=numpy.ones(dimensions[x]) * drop_rates[x]))
 
 		if recurrent_modes[x] is not None:
-			assert activations[x] is None
-			#assert drop_modes[x + 1] is None
+			# assert activations[x] is None
+			# assert drop_modes[x + 1] is None
 			layers.append(
 				recurrent_modes[x](input_size=dimensions[x], hidden_size=dimensions[x + 1],
 				                   num_layers=number_of_recurrent_layers[x],
 				                   dropout=drop_rates[x + 1]))
 		else:
 			layers.append(nn.Linear(dimensions[x], dimensions[x + 1]))
+			# temp = nn.Linear(dimensions[x], dimensions[x + 1])
+			# temp.weight.data.uniform_(-0.1, 0.1)
+			# temp.bias.data.zero_()
+			# layers.append(temp)
 			if activations[x] is not None:
 				layers.append(activations[x]())
 

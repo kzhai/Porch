@@ -3,8 +3,7 @@ import warnings
 import numpy
 import torch
 import torch.nn as nn
-
-from porch import _functions
+from torch.autograd import Function
 
 __all__ = [
 	"sigmoid",
@@ -12,6 +11,8 @@ __all__ = [
 	#
 	"AdaptiveBernoulliDropout",
 	"AdaptiveBetaBernoulliDropout",
+	#
+	"DropoutFunction",
 	#
 	"Dropout",
 	# "Dropout2d",
@@ -24,6 +25,37 @@ __all__ = [
 	# "LinearAndGaussianDropoutWang",
 	# "LinearAndVariationalGaussianDropoutWang",
 ]
+
+
+class DropoutFunction(Function):
+	@staticmethod
+	def forward(ctx, input, p, train):
+		if numpy.any(p < 0) or numpy.any(p > 1):
+			raise ValueError("dropout probability has to be between 0 and 1, "
+			                 "but got {} with max {} and min {}".format(p, torch.max(p), torch.min(p)))
+
+		if len(p.shape) == 0:
+			filter = torch.bernoulli(1 - p.repeat(tuple(input.shape)))
+		else:
+			assert p.shape[-1] == input.shape[-1]
+			filter = torch.bernoulli(1 - p.repeat(tuple(input.shape[:-1]) + (1,)))
+
+		ctx.input = input
+		ctx.p = p
+		ctx.train = train
+		ctx.filter = filter
+
+		if train:
+			return input.mul(filter)
+		else:
+			return input.mul(1 - ctx.p)
+
+	@staticmethod
+	def backward(ctx, grad_output):
+		if ctx.train:
+			return grad_output * ctx.filter, None, None
+		else:
+			return grad_output, -grad_output * ctx.input, None
 
 
 def sigmoid(x, scale=1):
@@ -93,7 +125,7 @@ class AdaptiveBetaBernoulliDropout(AdaptiveBernoulliDropout):
 			p = torch.clamp(sigmoid(self.logit_p), min=1e-6, max=1 - 1e-6)
 
 		# return _functions.dropout.Dropout.apply(input, p, self.training)
-		#print(torch.max(p).item(), torch.min(p).item())
+		# print(torch.max(p).item(), torch.min(p).item())
 
 		self.filter = torch.bernoulli(1 - p)
 		if self.training:
@@ -112,11 +144,16 @@ class Dropout(nn.Module):
 
 		self.p = torch.tensor(p, dtype=torch.float)
 
+	# self.inplace = inplace
+
 	def extra_repr(self):
 		return 'p={}'.format(self.p)
 
 	def forward(self, input):
-		return _functions.dropout.Dropout.apply(input, self.p, self.training)
+		# return F.dropout(input, self.p, self.training, self.inplace)
+		# return dropout(input, self.p, self.training, self.inplace)
+
+		return DropoutFunction.apply(input, self.p, self.training)
 
 
 # Dropout = nn.Dropout
@@ -143,6 +180,9 @@ class GaussianDropout(nn.Module):
 		# self.log_alpha = numpy.log(alpha)
 		# self.log_alpha = nn.Parameter(torch.tensor(numpy.log(alpha)), dtype=torch.float)
 		self.logit_alpha = torch.tensor(logit(alpha), dtype=torch.float)
+
+	def extra_repr(self):
+		return 'p={}'.format(1. / (sigmoid(self.logit_alpha) ** 2 + 1))
 
 	def forward(self, input):
 		"""

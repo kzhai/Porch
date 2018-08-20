@@ -69,6 +69,7 @@ class GenericMLP(nn.Module):
 			drop_rates=drop_rates
 		)
 
+		self.layers = layers
 		self.classifier = nn.Sequential(*layers)
 
 	def forward(self, x, *args, **kwargs):

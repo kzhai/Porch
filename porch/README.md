@@ -48,11 +48,41 @@ The `--information` option specifies the information metric you want to track af
 You may stack as many information functions into the training framework.
 
 Alternatively, you could extend or implement a class with some pre-defined settings.
-For example, `porch.models.mlp.MLP_test` extends `porch.models.mlp.GenericMLP` with 1 hidden layer of 1024 `ReLU` units, 0.2 dropout rate on input layer, 0.5 dropout on hidden layer, and `LogSoftmax` as the activation function of output layer.
+For example, `porch.models.mlp.MLP_test` extends `porch.models.mlp.GenericMLP` with 1 hidden layer of 1024 `ReLU` units, 0.2 dropout rate on input layer, 0.5 dropout on hidden layer, and `cross_entropy` as the loss of the output layer.
 
 ```bash
 python -um porch.base \
 --model=porch.models.mlp.MLP_test \
+--model_kwargs=input_shape:784,output_shape:10 \
+--loss=cross_entropy \
+--data=loadFeatureAndLabel \
+--input_directory=./data/mnist_784/ \
+--output_directory=./data/mnist_784/ \
+--minibatch_size=64 \
+--number_of_epochs=10 \
+--optimizer_kwargs=lr:1e-3,momentum:0.9 \
+--information=accuracy
+```
+
+Similarly for `porch.models.mlp.MLP_GaussianDropout_test` and `porch.models.mlp.MLP_VariationalGaussianDropout_test`, with 1 hidden layer of 1024 `ReLU` units, 0.2 dropout rate on input layer, 0.5 dropout on hidden layer, and `cross_entropy` as the loss of the output layer.
+
+```bash
+python -um porch.base \
+--model=porch.models.mlp.MLP_GaussianDropout_test \
+--model_kwargs=input_shape:784,output_shape:10 \
+--loss=cross_entropy \
+--data=loadFeatureAndLabel \
+--input_directory=./data/mnist_784/ \
+--output_directory=./data/mnist_784/ \
+--minibatch_size=64 \
+--number_of_epochs=10 \
+--optimizer_kwargs=lr:1e-3,momentum:0.9 \
+--information=accuracy
+```
+
+```bash
+python -um porch.base \
+--model=porch.models.mlp.MLP_VariationalGaussianDropout_test \
 --model_kwargs=input_shape:784,output_shape:10 \
 --loss=cross_entropy \
 --data=loadFeatureAndLabel \

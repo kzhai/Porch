@@ -11,9 +11,6 @@ from .modules import *
 from .regularizer import *
 from .optim import *
 
-from . import _functions
-
-
 """
 try:
 	from .lenetA import *

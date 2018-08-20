@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import sys
 import timeit
 
 import numpy
@@ -221,6 +222,8 @@ def train_epoch(device,
 		# minibatch_time, minibatch_total_loss, minibatch_total_reg, minibatch_total_infos = train_minibatch_output
 		minibatch_time, minibatch_total_loss, minibatch_total_reg, minibatch_total_infos, minibatch_cache = train_minibatch_output
 
+		#print(minibatch_start_index // minibatch_size, "minibatch_average_obj", minibatch_total_loss / len(minibatch_x))
+
 		epoch_total_loss += minibatch_total_loss
 		epoch_total_reg += minibatch_total_reg
 		for information_function in information_functions:
@@ -322,11 +325,9 @@ def train_minibatch(device,
 
 	# `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
 	clip_grad_norm = kwargs.get("clip_grad_norm", 0)
-	clip_grad_norm = float(clip_grad_norm) if type(clip_grad_norm) == str else clip_grad_norm
+	clip_grad_norm = clip_grad_norm if type(clip_grad_norm) == float else float(clip_grad_norm)
 	if clip_grad_norm > 0:
-		#print(clip_grad_norm)
-		#print(list(param_group['params'] for param_group in optimizer.param_groups))
-		#torch.nn.utils.clip_grad_norm_(list(param_group['params'] for param_group in optimizer.param_groups), clip_grad_norm)
+		# torch.nn.utils.clip_grad_norm_(list(param_group['params'] for param_group in optimizer.param_groups), clip_grad_norm)
 		torch.nn.utils.clip_grad_norm_(network.parameters(), clip_grad_norm)
 
 	optimizer.step()
@@ -372,7 +373,7 @@ def test_epoch(device,
 
 	epoch_time = timeit.default_timer()
 	with torch.no_grad():
-		#progress_marker = 10
+		# progress_marker = 10
 		minibatch_start_index = 0
 		while minibatch_start_index < number_of_data:
 			# automatically handles the left-over data
@@ -632,7 +633,6 @@ def train_adaptive_model(network, dataset, settings):
 	for epoch_index in range(1, settings.number_of_epochs + 1):
 		# if epoch_index >= 5:
 		# optimizer = settings.optimization(adaptable_params, **settings.optimization_kwargs)
-		# print(optimizer.param_groups[0]['params'])
 
 		if epoch_index % 2 == 0:
 			network.train(True)
