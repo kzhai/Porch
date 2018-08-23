@@ -6,11 +6,11 @@ import torch.nn as nn
 from torch.autograd import Function
 
 __all__ = [
-	"sigmoid",
+	# "sigmoid",
 	"logit",
 	#
-	"AdaptiveBernoulliDropout",
-	"AdaptiveBetaBernoulliDropout",
+	"VariationalBernoulliDropout",
+	"VariationalBetaBernoulliDropout",
 	#
 	"DropoutFunction",
 	#
@@ -29,40 +29,46 @@ __all__ = [
 
 class DropoutFunction(Function):
 	@staticmethod
-	def forward(ctx, input, p, train):
+	def forward(ctx, input, p, filter=None):
 		if numpy.any(p < 0) or numpy.any(p > 1):
 			raise ValueError("dropout probability has to be between 0 and 1, "
 			                 "but got {} with max {} and min {}".format(p, torch.max(p), torch.min(p)))
 
+		'''
 		if len(p.shape) == 0:
 			filter = torch.bernoulli(1 - p.repeat(tuple(input.shape)))
 		else:
 			assert p.shape[-1] == input.shape[-1]
 			filter = torch.bernoulli(1 - p.repeat(tuple(input.shape[:-1]) + (1,)))
+		'''
 
 		ctx.input = input
 		ctx.p = p
-		ctx.train = train
+		# ctx.train = train
 		ctx.filter = filter
 
-		if train:
+		if filter is not None:
 			return input.mul(filter)
 		else:
 			return input.mul(1 - ctx.p)
 
+	# @TODO: merge to train mode altogether, to avoid train=True/False split optimization
+
 	@staticmethod
 	def backward(ctx, grad_output):
-		if ctx.train:
+		if ctx.filter is not None:
 			return grad_output * ctx.filter, None, None
 		else:
-			return grad_output, -grad_output * ctx.input, None
+			return grad_output * (1 - ctx.p), (-grad_output * ctx.input).sum(0), None  # ctx.filter
 
 
+'''
 def sigmoid(x, scale=1):
 	if isinstance(x, torch.Tensor):
 		return 1. / (1. + torch.exp(-x / scale))
 	else:
 		return 1. / (1. + numpy.exp(-x / scale))
+'''
 
 
 def logit(x, scale=1):
@@ -85,9 +91,9 @@ def _validate_drop_rate_for_logit_parameterization(drop_rate, clip_margin=1e-6):
 	return numpy.asarray(drop_rate)
 
 
-class AdaptiveBernoulliDropout(nn.Module):
+class VariationalBernoulliDropout(nn.Module):
 	def __init__(self, p=.5):
-		super(AdaptiveBernoulliDropout, self).__init__()
+		super(VariationalBernoulliDropout, self).__init__()
 		if numpy.any(p < 0) or numpy.any(p > 1):
 			raise ValueError("dropout probability has to be between 0 and 1, "
 			                 "but got {}".format(p))
@@ -95,21 +101,63 @@ class AdaptiveBernoulliDropout(nn.Module):
 		self.filter = None
 
 	def forward(self, input):
+		'''
 		if self.logit_p.dim() == 1:
 			p = sigmoid(self.logit_p).expand(input.shape[0], -1)
 		else:
 			p = sigmoid(self.logit_p)
+		'''
 
-		self.filter = torch.bernoulli(1 - p)
+		p = torch.sigmoid(self.logit_p)
 		if self.training:
+			if len(p.shape) == 0:
+				filter = torch.bernoulli(1 - p.repeat(tuple(input.shape)))
+			else:
+				assert p.shape[-1] == input.shape[-1]
+				filter = torch.bernoulli(1 - p.repeat(tuple(input.shape[:-1]) + (1,)))
+		else:
+			filter = None
+		self.filter = filter
+
+		'''
+		if self.training and numpy.random.random()<0.5:
+			if len(p.shape) == 0:
+				filter = torch.bernoulli(1 - p.repeat(tuple(input.shape)))
+			else:
+				assert p.shape[-1] == input.shape[-1]
+				filter = torch.bernoulli(1 - p.repeat(tuple(input.shape[:-1]) + (1,)))
+			self.filter = filter
+
 			return input.mul(self.filter)
 		else:
 			return input.mul(1 - p)
+		'''
+
+		# return input.mul(1 - p)
+		return DropoutFunction.apply(input, p, self.filter)
+
+	def get_adaptables(self):
+		return self.logit_p
+
+	def variational_lower_bound_approximation(self):
+		if self.filter is None:
+			return torch.zeros(1)
+
+		p = torch.sigmoid(self.logit_p)
+		# print(self.filter.shape)
+
+		# assert self.filter.shape[0] == input.size(0), (filter, input)
+		filter_sum = torch.sum(self.filter, dim=0)
+
+		E_log_p_z = torch.log(p) * (self.filter.size(0) - filter_sum) + torch.log(1 - p) * filter_sum
+		E_log_q_z = - torch.log(p) * p - torch.log(1 - p) * (1 - p)
+
+		return E_log_p_z.sum() + E_log_q_z.sum()
 
 
-class AdaptiveBetaBernoulliDropout(AdaptiveBernoulliDropout):
+class VariationalBetaBernoulliDropout(VariationalBernoulliDropout):
 	def __init__(self, p=.5, alpha=.1, beta=.1):
-		super(AdaptiveBetaBernoulliDropout, self).__init__(p)
+		super(VariationalBetaBernoulliDropout, self).__init__(p)
 		if numpy.any(p < 0) or numpy.any(p > 1):
 			raise ValueError("dropout probability has to be between 0 and 1, "
 			                 "but got {}".format(p))
@@ -118,20 +166,43 @@ class AdaptiveBetaBernoulliDropout(AdaptiveBernoulliDropout):
 		self.hyper_alpha = alpha
 		self.hyper_beta = beta
 
+	'''
 	def forward(self, input):
-		if self.logit_p.dim() == 1:
-			p = torch.clamp(sigmoid(self.logit_p).expand(input.shape[0], -1), min=1e-6, max=1 - 1e-6)
-		else:
-			p = torch.clamp(sigmoid(self.logit_p), min=1e-6, max=1 - 1e-6)
-
 		# return _functions.dropout.Dropout.apply(input, p, self.training)
 		# print(torch.max(p).item(), torch.min(p).item())
 
-		self.filter = torch.bernoulli(1 - p)
+		p = torch.clamp(torch.sigmoid(self.logit_p), min=1e-6, max=1 - 1e-6)
+		# self.filter = torch.bernoulli(1 - p)
+		if len(p.shape) == 0:
+			filter = torch.bernoulli(1 - p.repeat(tuple(input.shape)))
+		else:
+			assert p.shape[-1] == input.shape[-1]
+			filter = torch.bernoulli(1 - p.repeat(tuple(input.shape[:-1]) + (1,)))
+		self.filter = filter
+
 		if self.training:
 			return input.mul(self.filter)
 		else:
 			return input.mul(1 - p)
+	'''
+
+	def variational_lower_bound_approximation(self):
+		if self.filter is None:
+			return torch.zeros(1)
+
+		p = torch.sigmoid(self.logit_p)
+		# print(self.filter.shape)
+
+		E_log_p_theta = self.filter.size(0) * (
+				(self.hyper_alpha - 1) * torch.log(1 - p) + (self.hyper_beta - 1) * torch.log(p))
+
+		# assert self.filter.shape[0] == input.size(0), (filter, input)
+		filter_sum = torch.sum(self.filter, dim=0)
+
+		E_log_p_z = torch.log(p) * (self.filter.size(0) - filter_sum) + torch.log(1 - p) * filter_sum
+		E_log_q_z = - torch.log(p) * p - torch.log(1 - p) * (1 - p)
+
+		return E_log_p_theta.sum() + E_log_p_z.sum() + E_log_q_z.sum()
 
 
 class Dropout(nn.Module):
@@ -143,6 +214,7 @@ class Dropout(nn.Module):
 			                 "but got {} with max {} and min{}".format(p, numpy.max(p), numpy.min(p)))
 
 		self.p = torch.tensor(p, dtype=torch.float)
+		self.filter = None
 
 	# self.inplace = inplace
 
@@ -150,10 +222,20 @@ class Dropout(nn.Module):
 		return 'p={}'.format(self.p)
 
 	def forward(self, input):
+		if self.training:
+			if len(self.p.shape) == 0:
+				filter = torch.bernoulli(1 - self.p.repeat(tuple(input.shape)))
+			else:
+				assert self.p.shape[-1] == input.shape[-1]
+				filter = torch.bernoulli(1 - self.p.repeat(tuple(input.shape[:-1]) + (1,)))
+		else:
+			filter = None
+		self.filter = filter
+
 		# return F.dropout(input, self.p, self.training, self.inplace)
 		# return dropout(input, self.p, self.training, self.inplace)
 
-		return DropoutFunction.apply(input, self.p, self.training)
+		return DropoutFunction.apply(input, self.p, self.filter)
 
 
 # Dropout = nn.Dropout
@@ -182,16 +264,36 @@ class GaussianDropout(nn.Module):
 		self.logit_alpha = torch.tensor(logit(alpha), dtype=torch.float)
 
 	def extra_repr(self):
-		return 'p={}'.format(1. / (sigmoid(self.logit_alpha) ** 2 + 1))
+		return 'p={}'.format(1. / (torch.sigmoid(self.logit_alpha) ** 2 + 1))
 
 	def forward(self, input):
 		"""
 		Sample noise   e ~ N(1, alpha)
 		Multiply noise h = h_ * e
 		"""
+
 		if self.training:
-			sigma = sigmoid(self.logit_alpha)
+			# sigma = sigmoid(self.logit_alpha)
+			sigma = torch.sigmoid(self.logit_alpha)
+			# print(sigma.shape)
+			# print(torch.randn(input.size()).shape)
 			perturbation = torch.randn(input.size()) * sigma + 1
+			# print(perturbation.shape)
+			# print(input.shape)
+
+			#
+			#
+			#
+			'''
+			if len(sigma.shape) == 0:
+				filter = torch.bernoulli(1 - p.repeat(tuple(input.shape)))
+			else:
+				assert sigma.shape[-1] == input.shape[-1]
+				filter = torch.bernoulli(1 - p.repeat(tuple(input.shape[:-1]) + (1,)))
+			'''
+			#
+			#
+			#
 
 			return input * perturbation
 		else:
@@ -202,34 +304,30 @@ class VariationalGaussianDropout(GaussianDropout):
 	def __init__(self, p=0.5, sparse=True):
 		super(VariationalGaussianDropout, self).__init__(p)
 
-		# alpha = p / (1. - p)
-		# self.log_alpha = nn.Parameter(torch.tensor(numpy.log(alpha), dtype=torch.float))
-		# sigma = numpy.ones(dim, dtype=numpy.float32) * numpy.sqrt(p / (1 - p))
 		self.logit_alpha = nn.Parameter(self.logit_alpha)
 		self.sparse = sparse
 
-	def nkld_approximation(self):
-		return nkld_approximation(sigmoid(self.logit_alpha), self.sparse)
+	def negative_kld_approximation(self):
+		# alpha = sigmoid(self.logit_alpha)
+		# alpha = F.sigmoid(self.logit_alpha)
+		alpha = torch.sigmoid(self.logit_alpha)
+		log_alpha = torch.log(alpha)
 
+		if self.sparse:
+			k1 = 0.63576
+			k2 = 1.8732
+			k3 = 1.48695
+			C = -k1
 
-def nkld_approximation(alpha, sparse=True):
-	log_alpha = torch.log(alpha)
+			kld_approx = k1 * torch.sigmoid(k2 + k3 * log_alpha) - 0.5 * torch.log(1 + 1. / alpha) + C
+		else:
+			c1 = 1.161451241083230
+			c2 = -1.502041176441722
+			c3 = 0.586299206427007
 
-	if sparse:
-		k1 = 0.63576
-		k2 = 1.8732
-		k3 = 1.48695
-		C = -k1
+			kld_approx = 0.5 * log_alpha + c1 * alpha + c2 * alpha ** 2 + c3 * alpha ** 3
 
-		kld_approx = k1 * torch.sigmoid(k2 + k3 * log_alpha) - 0.5 * torch.log(1 + 1. / alpha) + C
-	else:
-		c1 = 1.161451241083230
-		c2 = -1.502041176441722
-		c3 = 0.586299206427007
-
-		kld_approx = 0.5 * log_alpha + c1 * alpha + c2 * alpha ** 2 + c3 * alpha ** 3
-
-	return -kld_approx.sum()
+		return -kld_approx.sum()
 
 
 #
@@ -306,7 +404,7 @@ class LinearAndGaussianDropoutWang(nn.modules.Linear):
 				# print("sigmoid", a.shape, torch.max(a).item(), torch.min(a).item(), torch.mean(a), torch.sum(a))
 				a = self.weight.data
 				print("weight", a.shape, torch.max(a).item(), torch.min(a).item(), torch.mean(a), torch.sum(a))
-				a = sigmoid(self.logit_alpha) * (self.weight.t() ** 2).data
+				a = torch.sigmoid(self.logit_alpha) * (self.weight.t() ** 2).data
 				print("temp", a.shape, torch.max(a).item(), torch.min(a).item(), torch.mean(a), torch.sum(a))
 				a = sigma.data
 				print("sigma", a.shape, torch.max(a).item(), torch.min(a).item(), torch.mean(a), torch.sum(a))
@@ -336,7 +434,7 @@ class LinearAndVariationalGaussianDropoutWang(LinearAndGaussianDropoutWang):
 		self.sparse = sparse
 
 	def nkld_approximation(self):
-		return nkld_approximation(sigmoid(self.logit_alpha), self.sparse)
+		return nkld_approximation(torch.sigmoid(self.logit_alpha), self.sparse)
 
 	'''
 	def forward(self, input):

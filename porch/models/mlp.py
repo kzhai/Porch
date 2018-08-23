@@ -137,8 +137,8 @@ class MLP_AdaptiveBernoulliDropout_test(GenericMLP):
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
 			activations=layer_deliminator.join(["ReLU", "None"]),
 			drop_modes=layer_deliminator.join(
-				[porch.modules.AdaptiveBernoulliDropout.__name__,
-				 porch.modules.AdaptiveBernoulliDropout.__name__]),
+				[porch.modules.VariationalBernoulliDropout.__name__,
+				 porch.modules.VariationalBernoulliDropout.__name__]),
 			drop_rates=layer_deliminator.join(["0.2", "0.5"]),
 			*args, **kwargs
 		)
@@ -151,8 +151,8 @@ class MLP_AdaptiveBetaBernoulliDropout_test(GenericMLP):
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
 			activations=layer_deliminator.join(["ReLU", "None"]),
 			drop_modes=layer_deliminator.join(
-				[porch.modules.AdaptiveBetaBernoulliDropout.__name__,
-				 porch.modules.AdaptiveBetaBernoulliDropout.__name__]),
+				[porch.modules.VariationalBetaBernoulliDropout.__name__,
+				 porch.modules.VariationalBetaBernoulliDropout.__name__]),
 			drop_rates=layer_deliminator.join(["0.2", "0.5"]),
 			*args, **kwargs
 		)
@@ -209,8 +209,8 @@ class MLPAdaptiveDropout(nn.Module):
 	def __init__(self):
 		super(MLPAdaptiveDropout, self).__init__()
 		# self.input_drop = porch.modules.AdaptiveBernoulliDropoutInLogitSpace(p=numpy.ones(784) * 0.5)
-		self.input_drop = porch.modules.AdaptiveBetaBernoulliDropout(p=numpy.ones(784) * 0.5, alpha=0.1,
-		                                                             beta=0.1)
+		self.input_drop = porch.modules.VariationalBetaBernoulliDropout(p=numpy.ones(784) * 0.5, alpha=0.1,
+		                                                                beta=0.1)
 		# self.input_drop = porch.modules.AdaptiveBernoulliDropout(p=numpy.ones(784)*0.5)
 		self.fc = nn.Linear(784, 10)
 

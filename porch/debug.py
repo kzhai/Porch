@@ -4,8 +4,9 @@ import sys
 
 import numpy
 
+import torch
 import porch
-from porch.modules.dropout import sigmoid
+#from porch.modules.dropout import sigmoid
 
 logger = logging.getLogger(__name__)
 
@@ -249,14 +250,14 @@ def snapshot_dropout(network, epoch_index, settings=None, **kwargs):
 	for name, module in network.named_modules():
 		if isinstance(module, porch.modules.Dropout):
 			layer_retain_probability = 1 - module.p.data.numpy()
-		elif isinstance(module, porch.modules.AdaptiveBernoulliDropout):
-			layer_retain_probability = 1. - sigmoid(module.logit_p).data.numpy()
+		elif isinstance(module, porch.modules.VariationalBernoulliDropout):
+			layer_retain_probability = 1. - torch.sigmoid(module.logit_p).data.numpy()
 		# elif (type(module) is porch.modules.AdaptiveBernoulliDropoutBackup):
 		# layer_retain_probability = 1. - module.p.data.numpy()
 		elif (type(module) is porch.modules.VariationalGaussianDropout):
-			layer_retain_probability = 1. / (sigmoid(module.logit_alpha.data.numpy()) ** 2 + 1)
+			layer_retain_probability = 1. / (torch.sigmoid(module.logit_alpha).data.numpy() ** 2 + 1)
 		elif (type(module) is porch.modules.GaussianDropout):
-			layer_retain_probability = 1. / (sigmoid(module.logit_alpha.data.numpy()) ** 2 + 1)
+			layer_retain_probability = 1. / (torch.sigmoid(module.logit_alpha).data.numpy() ** 2 + 1)
 		else:
 			continue
 

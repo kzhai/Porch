@@ -61,13 +61,14 @@ class GenericRNN(nn.Module):
 
 		for idx, module in enumerate(layers):
 			self.add_module(str(idx), module)
-		#nn.Sequential(*layers)
+		# nn.Sequential(*layers)
 
 		'''
 		for layer in self.layers:
 			for name, parameter in layer.named_parameters():
 				self.register_parameter(name, parameter)
 		'''
+
 	# self.init_weights()
 	# self.forward(x=numpy.zeros((1, 10)))
 
@@ -90,7 +91,7 @@ class GenericRNN(nn.Module):
 		if hiddens is None:
 			print("Initialize hiddens to all zeros.")
 			hiddens = self.init_hiddens(x.shape[1])
-			#print("hiddens before", hiddens)
+		# print("hiddens before", hiddens)
 
 		'''
 		for hidden in hiddens:
@@ -108,7 +109,7 @@ class GenericRNN(nn.Module):
 			else:
 				x = layer(x)
 
-		#print("hiddens after", hiddens)
+		# print("hiddens after", hiddens)
 		# This is to transpose the minibatch size and sequencen length back, to accomodate the bptt algorithm.
 		x = x.transpose(0, 1)
 		# print("final shape:", x.shape, x.size(0) * x.size(1), x.size(2))

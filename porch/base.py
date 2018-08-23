@@ -1,7 +1,6 @@
 import argparse
 import logging
 import os
-import sys
 import timeit
 
 import numpy
@@ -165,8 +164,6 @@ def train_epoch(device,
                 regularizer_function_kwargs={},
                 information_function_kwargs={},
                 #
-                # train_kwargs={},
-                #
                 minibatch_size=64,
                 #
                 *args,
@@ -219,10 +216,29 @@ def train_epoch(device,
 		                                         **kwargs
 		                                         )
 
+		adaptable_optimizer = kwargs.get("adaptable_optimizer", None)
+		if adaptable_optimizer is not None:
+			train_minibatch_adaptive(device=device,
+			                         network=network,
+									 optimizer=adaptable_optimizer,
+									 dataset=data_minibatch,
+									 #
+									 loss_functions=loss_functions,
+									 regularizer_functions=regularizer_functions,
+									 information_functions=information_functions,
+									 #
+									 loss_function_kwargs=loss_function_kwargs,
+									 regularizer_function_kwargs=regularizer_function_kwargs,
+									 information_function_kwargs=information_function_kwargs,
+									 #
+									 *args,
+									 **kwargs
+			                         )
+
 		# minibatch_time, minibatch_total_loss, minibatch_total_reg, minibatch_total_infos = train_minibatch_output
 		minibatch_time, minibatch_total_loss, minibatch_total_reg, minibatch_total_infos, minibatch_cache = train_minibatch_output
 
-		#print(minibatch_start_index // minibatch_size, "minibatch_average_obj", minibatch_total_loss / len(minibatch_x))
+		# print(minibatch_start_index // minibatch_size, "minibatch_average_obj", minibatch_total_loss / len(minibatch_x))
 
 		epoch_total_loss += minibatch_total_loss
 		epoch_total_reg += minibatch_total_reg
@@ -231,10 +247,10 @@ def train_epoch(device,
 
 		minibatch_start_index += minibatch_size
 		if minibatch_start_index * 100. / number_of_data >= progress_marker:
-			print('| {:3.2f}% epoch | {:.2f} ms/minibatch | {:.2f} loss |'.format(
+			print('| {:3.2f}% epoch | {:.2f} ms/minibatch | {:.2f} loss | {:.2f} regularizer |'.format(
 				minibatch_start_index * 100 / number_of_data,
 				(timeit.default_timer() - epoch_time) * 1000 / (minibatch_start_index / minibatch_size),
-				epoch_total_loss / minibatch_start_index))
+				epoch_total_loss / minibatch_start_index, epoch_total_reg / minibatch_start_index))
 			progress_marker += 10
 
 	epoch_time = timeit.default_timer() - epoch_time
@@ -264,6 +280,96 @@ def train_minibatch(device,
                     **kwargs
                     ):
 	network.train()
+
+	minibatch_x, minibatch_y = dataset
+	minibatch_y = minibatch_y.view(-1)
+	minibatch_x, minibatch_y = minibatch_x.to(device), minibatch_y.to(device)
+
+	minibatch_time = timeit.default_timer()
+
+	'''
+	hiddens = getattr(kwargs, "hiddens", None)
+	network_kwargs = {}
+	'''
+
+	minibatch_cache = {}
+	optimizer.zero_grad()
+	output = network(minibatch_x, **kwargs)
+	if isinstance(output, tuple):
+		output, hiddens = output
+		minibatch_cache["hiddens"] = detach(hiddens)
+	# output = network(minibatch_x, seed_hiddens=hiddens, return_hiddens=True)
+
+	minibatch_total_loss = 0
+	minibatch_total_reg = 0
+	minibatch_total_infos = {}
+	for information_function in information_functions:
+		minibatch_total_infos[information_function] = 0
+
+	minibatch_average_loss = 0
+	for loss_function in loss_functions:
+		minibatch_loss = loss_function(output, minibatch_y, **loss_function_kwargs)
+		if ("size_average" not in loss_function_kwargs) or loss_function_kwargs["size_average"]:
+			minibatch_total_loss += minibatch_loss.item() * len(minibatch_x)
+			minibatch_average_loss += minibatch_loss
+		else:
+			minibatch_total_loss += minibatch_loss.item()
+			minibatch_average_loss += minibatch_loss / len(minibatch_x)
+
+	minibatch_average_reg = 0
+	for regularizer_function, regularizer_weight in regularizer_functions.items():
+		minibatch_reg = regularizer_function(network, input=minibatch_x, output=output,
+		                                     **regularizer_function_kwargs) * regularizer_weight
+
+		if ("size_average" not in regularizer_function_kwargs) or regularizer_function_kwargs[
+			"size_average"]:
+			minibatch_total_reg += minibatch_reg.item() * len(minibatch_x)
+			minibatch_average_reg += minibatch_reg
+		else:
+			minibatch_total_reg += minibatch_reg.item()
+			minibatch_average_reg += minibatch_reg / len(minibatch_x)
+
+	for information_function in information_functions:
+		minibatch_info = information_function(output, minibatch_y, **information_function_kwargs)
+		if ("size_average" not in information_function_kwargs) or information_function_kwargs["size_average"]:
+			minibatch_total_infos[information_function] += minibatch_info.item() * len(minibatch_x)
+		else:
+			minibatch_total_infos[information_function] += minibatch_info.item()
+
+	minibatch_average_obj = minibatch_average_loss + minibatch_average_reg
+	minibatch_average_obj.backward()
+
+	# `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
+	clip_grad_norm = kwargs.get("clip_grad_norm", 0)
+	clip_grad_norm = clip_grad_norm if type(clip_grad_norm) == float else float(clip_grad_norm)
+	if clip_grad_norm > 0:
+		# torch.nn.utils.clip_grad_norm_(list(param_group['params'] for param_group in optimizer.param_groups), clip_grad_norm)
+		torch.nn.utils.clip_grad_norm_(network.parameters(), clip_grad_norm)
+
+	optimizer.step()
+
+	minibatch_time = timeit.default_timer() - minibatch_time
+
+	return minibatch_time, minibatch_total_loss, minibatch_total_reg, minibatch_total_infos, minibatch_cache
+
+def train_minibatch_adaptive(device,
+                    network,
+                    optimizer,
+                    dataset,
+                    #
+                    loss_functions,
+                    regularizer_functions={},
+                    information_functions={},
+                    #
+                    loss_function_kwargs={},
+                    regularizer_function_kwargs={},
+                    information_function_kwargs={},
+                    #
+                    *args,
+                    **kwargs
+                    ):
+	# We want to turn to test mode when updating the adaptive variables.
+	network.train(False)
 
 	minibatch_x, minibatch_y = dataset
 	minibatch_y = minibatch_y.view(-1)
@@ -512,9 +618,42 @@ def train_model(network, dataset, settings):
 
 	network = network.to(settings.device)
 
+	#
+	#
+	#
+
+	optimizer = settings.optimizer(network.parameters(), **settings.optimizer_kwargs)
+
+	adaptable_parameters = []
+	for name, module in network.named_modules():
+		try:
+			module_adaptables = module.get_adaptables()
+			adaptable_parameters.append(module_adaptables)
+		except AttributeError:
+			pass
+
+		'''
+		if (type(module) is porch.modules.dropout.AdaptiveBernoulliDropout) or \
+				(type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropout):
+			# or (type(module) is porch.modules.dropout.AdaptiveBernoulliDropoutBackup)
+			# or (type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropoutBackup)
+			for p in module.parameters():
+				adaptable_parameters.append(p)
+		elif (type(module) is nn.Linear):
+			for p in module.parameters():
+				trainable_params.append(p)
+		'''
+
+	if len(adaptable_parameters)>0:
+		adaptable_optimizer = settings.optimizer(adaptable_parameters, **settings.optimizer_kwargs)
+		settings.train_kwargs["adaptable_optimizer"] = adaptable_optimizer
+		print(adaptable_optimizer)
+
+	#
+	#
+	#
+
 	for epoch_index in range(1, settings.number_of_epochs + 1):
-		network.train(True)
-		optimizer = settings.optimizer(network.parameters(), **settings.optimizer_kwargs)
 		epoch_train_time, epoch_train_loss, epoch_train_reg, epoch_train_infos = train_epoch(
 			device=settings.device,
 			network=network,
@@ -540,7 +679,6 @@ def train_model(network, dataset, settings):
 			logger.info('train: epoch {}, {}={}'.format(epoch_index, information_function, information_value))
 			print('train: epoch {}, {}={}'.format(epoch_index, information_function, information_value))
 
-		network.train(False)
 		epoch_test_time, epoch_test_loss, epoch_test_reg, epoch_test_infos = test_epoch(
 			device=settings.device,
 			network=network,
@@ -617,8 +755,8 @@ def train_adaptive_model(network, dataset, settings):
 	trainable_params = []
 	adaptable_params = []
 	for name, module in network.named_modules():
-		if (type(module) is porch.modules.dropout.AdaptiveBernoulliDropout) or \
-				(type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropout):
+		if (type(module) is porch.modules.dropout.VariationalBernoulliDropout) or \
+				(type(module) is porch.modules.dropout.VariationalBetaBernoulliDropout):
 			# or (type(module) is porch.modules.dropout.AdaptiveBernoulliDropoutBackup)
 			# or (type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropoutBackup)
 			for p in module.parameters():
@@ -626,6 +764,13 @@ def train_adaptive_model(network, dataset, settings):
 		elif (type(module) is nn.Linear):
 			for p in module.parameters():
 				trainable_params.append(p)
+
+	print("-" * 10, "trainable", "-" * 10)
+	for parameter in trainable_params:
+		print(parameter.shape)
+	print("-" * 10, "adaptable", "-" * 10)
+	for parameter in adaptable_params:
+		print(parameter.shape)
 
 	optimizer_trainables = settings.optimizer(trainable_params, **settings.optimizer_kwargs)
 	optimizer_adaptables = settings.optimizer(adaptable_params, **settings.optimizer_kwargs)
@@ -635,11 +780,13 @@ def train_adaptive_model(network, dataset, settings):
 		# optimizer = settings.optimization(adaptable_params, **settings.optimization_kwargs)
 
 		if epoch_index % 2 == 0:
-			network.train(True)
-			optimizer = optimizer_trainables
-		else:
 			network.train(False)
 			optimizer = optimizer_adaptables
+			print("optimizing adaptables...")
+		else:
+			network.train(True)
+			optimizer = optimizer_trainables
+			print("optimizing trainable...")
 
 		# network.train(True)
 		# optimizer = settings.optimizer(network.parameters(), **settings.optimizer_kwargs)
@@ -783,7 +930,7 @@ def start_model():
 
 	start_train = timeit.default_timer()
 	train_model(model, dataset, settings)
-	# train_adaptive_model(model, dataset, settings)
+	#train_adaptive_model(model, dataset, settings)
 	end_train = timeit.default_timer()
 
 	print("Optimization complete...")

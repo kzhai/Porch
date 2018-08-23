@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional
 
 import porch
-from porch.modules.dropout import sigmoid
+#from porch.modules.dropout import sigmoid
 
 logger = logging.getLogger(__name__)
 
@@ -13,9 +13,19 @@ __all__ = [
 ]
 
 
-def variational_gaussian_dropout(network, input=None, output=None, sparse=True):
+def variational_gaussian_dropout(network, input=None, output=None):
 	kld_approximation = torch.zeros(1)
 	for name, module in network.named_modules():
+		temp_kld_approximation = torch.zeros(1)
+		try:
+			#nkld_approximation = module.nkld_approximation
+			temp_kld_approximation = module.negative_kld_approximation()
+		except AttributeError:
+			pass
+
+		kld_approximation += temp_kld_approximation.sum()
+
+		'''
 		if (type(module) is porch.modules.dropout.VariationalGaussianDropout) or \
 				(type(module) is porch.modules.dropout.LinearAndVariationalGaussianDropoutWang):
 			if sparse:
@@ -36,23 +46,31 @@ def variational_gaussian_dropout(network, input=None, output=None, sparse=True):
 
 			# kld_approximation += -kld_approx.mean()
 			kld_approximation += -kld_approx.sum()
+		'''
 
-	'''
-	if size_average:
-		return kld_approximation.sum() / input.size(0)
-	'''
 	return kld_approximation.sum() / input.size(0)
 
 
 def variational_bernoulli_dropout(network, input=None, output=None):
 	variational_lower_bound = torch.zeros(1)
 	for name, module in network.named_modules():
+		temp_variational_lower_bound = torch.zeros(1)
+		try:
+			# nkld_approximation = module.nkld_approximation
+			temp_variational_lower_bound = module.variational_lower_bound_approximation()
+		except AttributeError:
+			pass
+
+		#print(temp_variational_lower_bound)
+		variational_lower_bound += temp_variational_lower_bound.sum()
+
+		'''
 		if (type(module) is porch.modules.dropout.AdaptiveBernoulliDropoutBackup):
 			p = module.p
 			filter = module.filter
 			E_log_p_theta = torch.tensor(0, dtype=torch.float)
-		elif (type(module) is porch.modules.dropout.AdaptiveBernoulliDropout):
-			p = sigmoid(module.logit_p)
+		elif (type(module) is porch.modules.dropout.VariationalBernoulliDropout):
+			p = torch.sigmoid(module.logit_p)
 			filter = module.filter
 			E_log_p_theta = torch.tensor(0, dtype=torch.float)
 		elif (type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropoutBackup):
@@ -60,22 +78,34 @@ def variational_bernoulli_dropout(network, input=None, output=None):
 			filter = module.filter
 			E_log_p_theta = input.size(0) * (
 					(module.hyper_alpha - 1) * torch.log(1 - p) + (module.hyper_beta - 1) * torch.log(p))
-		elif (type(module) is porch.modules.dropout.AdaptiveBetaBernoulliDropout):
-			p = sigmoid(module.logit_p)
+		elif (type(module) is porch.modules.dropout.VariationalBetaBernoulliDropout):
+			p = torch.sigmoid(module.logit_p)
 			filter = module.filter
 			E_log_p_theta = input.size(0) * (
 					(module.hyper_alpha - 1) * torch.log(1 - p) + (module.hyper_beta - 1) * torch.log(p))
 		else:
 			continue
+		'''
+		#
+		#
+		#
+		'''
+		if len(p.shape) == 0:
+			filter = torch.bernoulli(1 - p.repeat(tuple(input.shape)))
+		else:
+			#assert p.shape[-1] == input.shape[-1]
+			filter = torch.bernoulli(1 - p.repeat(tuple(input.shape[:-1]) + (1,)))
+		'''
+		#
+		#
+		#
 
-		# if filter is None:
-		# return 0
-
+		'''
 		assert filter.shape[0] == input.size(0), (filter, input)
 		filter = torch.sum(filter, dim=0)
 		E_log_p_z = torch.log(p) * (input.size(0) - filter) + torch.log(1 - p) * filter
 		E_log_q_z = - torch.log(p) * p - torch.log(1 - p) * (1 - p)
 
 		variational_lower_bound += E_log_p_z.sum() + E_log_q_z.sum() + E_log_p_theta.sum()
-
-	return -variational_lower_bound.sum() / input.size(0)
+		'''
+	return variational_lower_bound.sum() / input.size(0)

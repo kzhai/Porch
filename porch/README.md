@@ -85,6 +85,7 @@ python -um porch.base \
 --model=porch.models.mlp.MLP_VariationalGaussianDropout_test \
 --model_kwargs=input_shape:784,output_shape:10 \
 --loss=cross_entropy \
+--regularizer=variational_gaussian_dropout:5e-2 \
 --data=loadFeatureAndLabel \
 --input_directory=./data/mnist_784/ \
 --output_directory=./data/mnist_784/ \
