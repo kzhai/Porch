@@ -164,7 +164,7 @@ def add_generic_options(model_parser):
 	                          default=0, help="max norm constraint [0 - None]")
 	'''
 
-	# model_parser.add_argument('--device', dest="device", action='store', default="cuda", help='device [cuda]')
+	#model_parser.add_argument('--device', dest="device", action='store', default="cuda", help='device [cuda]')
 	model_parser.add_argument('--random_seed', type=int, default=-1, help='random seed (default: -1=time)')
 
 	model_parser.add_argument("--snapshot", dest='snapshot', action='append', default=[],

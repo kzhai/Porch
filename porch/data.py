@@ -10,11 +10,9 @@ __all__ = [
 	"loadFeatureAndLabel",
 	"loadSequence",
 	"toSequenceMinibatch",
-	#"convert_to_sequence_minibatch",
+	# "convert_to_sequence_minibatch",
 	# "batchify_and_sequencify",
 ]
-
-
 
 
 def load_sequence(input_directory, data_mode="test"):
@@ -32,6 +30,7 @@ def load_feature_and_label(input_directory, data_mode="test"):
 	assert len(dataset_x) == len(dataset_y)
 	logger.info("Successfully load %d %s data from %s..." % (len(dataset_x), data_mode, input_directory))
 	return (dataset_x, dataset_y)
+
 
 '''
 def convert_to_sequence_minibatch(dataset, **kwargs):
@@ -53,6 +52,7 @@ def convert_to_sequence_minibatch(dataset, **kwargs):
 	test_dataset = batchify_and_sequencify(test_dataset, minibatch_size=minibatch_size, sequence_length=sequence_length)
 	return train_dataset, validate_dataset, test_dataset
 '''
+
 
 def batchify_and_sequencify(dataset, **kwargs):
 	assert ("minibatch_size" in kwargs)
@@ -84,6 +84,7 @@ def batchify_and_sequencify(dataset, **kwargs):
 			dataset[:, i * sequence_length + 1:(i + 1) * sequence_length + 1]
 
 	return torch.tensor(dataset_x), torch.tensor(dataset_y)
+
 
 toSequenceMinibatch = batchify_and_sequencify
 loadFeatureAndLabel = load_feature_and_label

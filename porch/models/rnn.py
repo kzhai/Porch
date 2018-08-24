@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
 	"GenericRNN",
+	"initialize_recurrent_hidden_states",
 ]
 
 
@@ -90,8 +91,7 @@ class GenericRNN(nn.Module):
 		hiddens = kwargs.get("hiddens", None)
 		if hiddens is None:
 			print("Initialize hiddens to all zeros.")
-			hiddens = self.init_hiddens(x.shape[1])
-		# print("hiddens before", hiddens)
+			hiddens = initialize_recurrent_hidden_states(self, x.shape[1])
 
 		'''
 		for hidden in hiddens:
@@ -118,7 +118,8 @@ class GenericRNN(nn.Module):
 		# x = x.transpose(1, 2)
 		return x, hiddens
 
-	def init_hiddens(self, minibatch_size):
+	'''
+	def init_hiddens(self, minibatch_size, ):
 		hiddens = []
 		for layer in self.layers:
 			weight = next(self.parameters())
@@ -129,9 +130,28 @@ class GenericRNN(nn.Module):
 				hiddens.append(weight.new_zeros(layer.num_layers, minibatch_size, layer.hidden_size))
 
 		return hiddens
+	'''
 
 
-class RNN_WordLanguageModel_testbackup(GenericRNN):
+def initialize_recurrent_hidden_states(network, minibatch_size, method=torch.zeros, scale=1., offset=0.):
+	hiddens = []
+	for layer in network.layers:
+		#weight = next(network.parameters())
+		if isinstance(layer, nn.LSTM):
+			# hiddens.append((weight.new_zeros(layer.num_layers, minibatch_size, layer.hidden_size),
+			# weight.new_zeros(layer.num_layers, minibatch_size, layer.hidden_size)))
+			hiddens.append(
+				(torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset),
+				 torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset)))
+		elif isinstance(layer, nn.GRU) or isinstance(layer, nn.RNN):
+			# hiddens.append(weight.new_zeros(layer.num_layers, minibatch_size, layer.hidden_size))
+			hiddens.append(
+				torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset))
+
+	return hiddens
+
+
+class RNN_WordLanguageModel_test1(GenericRNN):
 	def __init__(self,
 	             input_shape,
 	             embedding_dimension,
@@ -140,7 +160,7 @@ class RNN_WordLanguageModel_testbackup(GenericRNN):
 	             #
 	             *args, **kwargs
 	             ):
-		super(RNN_WordLanguageModel_testbackup, self).__init__(
+		super(RNN_WordLanguageModel_test1, self).__init__(
 			input_shape=input_shape,
 			embedding_dimension=embedding_dimension,
 			dimensions=layer_deliminator.join(
