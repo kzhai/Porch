@@ -125,9 +125,10 @@ python -um porch.base \
 --model_kwargs=input_shape:33278,embedding_dimension:50,recurrent_dimension:50,drop_rate:0.5,output_shape:33278 \
 --loss=cross_entropy \
 --data=loadSequence \
---data=toSequenceMinibatch,minibatch_size:20,sequence_length:35 \
---input_directory=./data/wikitext-2/ \
---output_directory=./data/wikitext-2/ \
+--data=batchify,batch_size:20 \
+--data=sequencify,sequence_length:35 \
+--input_directory=./data/wk2/ \
+--output_directory=./data/wk2/ \
 --minibatch_size=20 \
 --number_of_epochs=4 \
 --optimizer_kwargs=lr:20 \

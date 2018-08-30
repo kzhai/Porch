@@ -23,26 +23,14 @@ __all__ = [
 ]
 
 
-def load_datasets(input_directory, data_mode="test", function_parameter_mapping={porch.data.load_sequence: {}}):
-	dataset = None
-	for data_function in function_parameter_mapping:
-		if dataset is None:
-			dataset = data_function(input_directory, data_mode)
-		else:
-			data_parameter = function_parameter_mapping[data_function]
-			dataset = data_function(dataset, **data_parameter)
-
-	return dataset
-
-
 def load_datasets_to_start(input_directory, output_directory, number_of_validate_data=0,
-                           function_parameter_mapping={porch.data.load_sequence: {}}):
-	test_dataset = load_datasets(input_directory, data_mode="test",
-	                             function_parameter_mapping=function_parameter_mapping)
+                           function_parameter_mapping={porch.data.loadSequence: {}}):
+	test_dataset = porch.data.load_datasets(input_directory, data_mode="test",
+	                                        function_parameter_mapping=function_parameter_mapping)
 
 	if number_of_validate_data >= 0:
-		total_dataset = load_datasets(input_directory, data_mode="train",
-		                              function_parameter_mapping=function_parameter_mapping)
+		total_dataset = porch.data.load_datasets(input_directory, data_mode="train",
+		                                         function_parameter_mapping=function_parameter_mapping)
 		# train_dataset_temp = load_feature_and_labels(input_directory, dataset="train")
 		total_dataset_x, total_dataset_y = total_dataset
 
@@ -64,21 +52,21 @@ def load_datasets_to_start(input_directory, output_directory, number_of_validate
 		validate_dataset = (validate_set_x, validate_set_y)
 		logger.info("Successfully load data %s with %d to validate..." % (input_directory, len(validate_set_x)))
 	else:
-		train_dataset = load_datasets(input_directory, data_mode="train",
-		                              function_parameter_mapping=function_parameter_mapping)
-		validate_dataset = load_datasets(input_directory, data_mode="validate",
-		                                 function_parameter_mapping=function_parameter_mapping)
+		train_dataset = porch.data.load_datasets(input_directory, data_mode="train",
+		                                         function_parameter_mapping=function_parameter_mapping)
+		validate_dataset = porch.data.load_datasets(input_directory, data_mode="validate",
+		                                            function_parameter_mapping=function_parameter_mapping)
 
 	return train_dataset, validate_dataset, test_dataset
 
 
 def load_datasets_to_resume(input_directory, model_directory, output_directory,
-                            function_parameter_mapping={porch.data.load_sequence: {}}):
-	test_dataset = load_datasets(input_directory, data_mode="test",
-	                             function_parameter_mapping=function_parameter_mapping)
+                            function_parameter_mapping={porch.data.loadSequence: {}}):
+	test_dataset = porch.data.load_datasets(input_directory, data_mode="test",
+	                                        function_parameter_mapping=function_parameter_mapping)
 
-	train_dataset_temp = load_datasets(input_directory, data_mode="train",
-	                                   function_parameter_mapping=function_parameter_mapping)
+	train_dataset_temp = porch.data.load_datasets(input_directory, data_mode="train",
+	                                              function_parameter_mapping=function_parameter_mapping)
 	total_data_x, total_data_y = train_dataset_temp
 
 	train_indices = numpy.load(os.path.join(model_directory, "train.index.npy"))
