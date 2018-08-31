@@ -244,6 +244,13 @@ def debug_rademacher_p_inf_q_1(network, minibatch, rescale=False, **kwargs):
 debug_rademacher = debug_rademacher_p_inf_q_1
 
 
+def snapshot_model(network, epoch_index, settings, **kwargs):
+	model_file = os.path.join(settings.output_directory, 'epoch=%d.pth' % epoch_index)
+	# pickle.dump(network._neural_network, open(model_file_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
+	torch.save(network.state_dict(), model_file)
+	# logger.info('Successfully saved model state to {}'.format(model_file))
+	print('Successfully saved model state to {} after epoch {}'.format(model_file, epoch_index))
+
 def snapshot_dropout(network, epoch_index, settings=None, **kwargs):
 	dropout_layer_index = 0
 

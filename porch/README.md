@@ -135,3 +135,20 @@ python -um porch.base \
 --train_kwargs=clip_grad_norm:0.25 \
 --information=accuracy
 ```
+
+```bash
+python3 -um porch.base \
+--model=porch.models.rnn.RNN_WordLanguageModel_test \
+--model_kwargs=input_shape:10000,embedding_dimension:650,recurrent_dimension:650,drop_rate:0.5,output_shape:10000 \
+--loss=cross_entropy \
+--data=loadSequence \
+--data=batchify,batch_size:20 \
+--data=sequencify,sequence_length:35 \
+--input_directory=./data/ptb/ \
+--output_directory=./data/ptb/ \
+--minibatch_size=20 \
+--number_of_epochs=39 \
+--optimizer_kwargs=lr:1 \
+--train_kwargs=clip_grad_norm:5 \
+--information=accuracy
+```

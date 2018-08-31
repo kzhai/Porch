@@ -3,9 +3,9 @@ from .base import *
 from .data import *
 from .debug import *
 from .loss import *
-from .models.mlp import *
-from .models.cnn import *
-from .models.rnn import *
+from .models import *
+#from .models.cnn import *
+#from .models.rnn import *
 #from .models import *
 from .modules import *
 from .regularizer import *

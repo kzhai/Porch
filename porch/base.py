@@ -149,7 +149,7 @@ def train_epoch(device,
 	minibatch_cache["hiddens"] = None
 
 	epoch_time = timeit.default_timer()
-	progress_marker = 10
+	progress_report_marker, progress_report_steper = 10, 10
 	minibatch_start_index = 0
 	while minibatch_start_index < number_of_data:
 		# automatically handles the left-over data
@@ -210,12 +210,12 @@ def train_epoch(device,
 			epoch_total_infos[information_function] += minibatch_total_infos[information_function]
 
 		minibatch_start_index += minibatch_size
-		if minibatch_start_index * 100. / number_of_data >= progress_marker:
+		if 100. * minibatch_start_index / number_of_data >= progress_report_marker:
 			print('| {:3.2f}% epoch | {:.2f} ms/iteration | {:.2f} loss | {:.2f} regularizer |'.format(
 				minibatch_start_index * 100 / number_of_data,
 				(timeit.default_timer() - epoch_time) * 1000 / (minibatch_start_index / minibatch_size),
 				epoch_total_loss / minibatch_start_index, epoch_total_reg / minibatch_start_index))
-			progress_marker += 10
+			progress_report_marker += progress_report_steper
 
 	epoch_time = timeit.default_timer() - epoch_time
 	epoch_average_loss = epoch_total_loss / len(dataset_x)
@@ -618,6 +618,7 @@ def train_model(network, dataset, settings):
 	#
 	#
 
+	model_snapshot_marker, model_snapshot_steper = 10, 10
 	for epoch_index in range(1, settings.number_of_epochs + 1):
 		epoch_train_time, epoch_train_loss, epoch_train_reg, epoch_train_infos = train_epoch(
 			device=settings.device,
@@ -641,8 +642,8 @@ def train_model(network, dataset, settings):
 			epoch_index, epoch_train_time, epoch_train_loss, epoch_train_reg))
 
 		for information_function, information_value in epoch_train_infos.items():
-			logger.info('train: epoch {}, {}={}'.format(epoch_index, information_function, information_value))
-			print('train: epoch {}, {}={}'.format(epoch_index, information_function, information_value))
+			logger.info('train: epoch {}, {}={}'.format(epoch_index, information_function.__name__, information_value))
+			print('train: epoch {}, {}={}'.format(epoch_index, information_function.__name__, information_value))
 
 		epoch_test_time, epoch_test_loss, epoch_test_reg, epoch_test_infos = test_epoch(
 			device=settings.device,
@@ -665,8 +666,8 @@ def train_model(network, dataset, settings):
 			epoch_index, epoch_test_time, epoch_test_loss, epoch_test_reg))
 
 		for information_function, information_value in epoch_test_infos.items():
-			logger.info('test: epoch {}, {}={}'.format(epoch_index, information_function, information_value))
-			print('test: epoch {}, {}={}'.format(epoch_index, information_function, information_value))
+			logger.info('test: epoch {}, {}={}'.format(epoch_index, information_function.__name__, information_value))
+			print('test: epoch {}, {}={}'.format(epoch_index, information_function.__name__, information_value))
 
 		# network.train(train_dataset, validate_dataset, test_dataset, settings.minibatch_size, output_directory)
 		# network.epoch_index += 1
@@ -681,10 +682,18 @@ def train_model(network, dataset, settings):
 
 		print("PROGRESS: {:.2f}%".format(100. * (epoch_index) / settings.number_of_epochs))
 
+		if 100. * (epoch_index) / settings.number_of_epochs > model_snapshot_marker:
+			model_file = os.path.join(settings.output_directory, 'model.pth')
+			# pickle.dump(network._neural_network, open(model_file_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
+			torch.save(network.state_dict(), model_file)
+			# logger.info('Successfully saved model state to {}'.format(model_file))
+			print('Successfully saved model state to {} after epoch {}'.format(model_file, epoch_index))
+			model_snapshot_marker += model_snapshot_steper
+
 	model_file = os.path.join(settings.output_directory, 'model.pth')
 	# pickle.dump(network._neural_network, open(model_file_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
 	torch.save(network.state_dict(), model_file)
-	logger.info('Successfully saved model state to {}'.format(model_file))
+	# logger.info('Successfully saved model state to {}'.format(model_file))
 	print('Successfully saved model state to {}'.format(model_file))
 
 	return
