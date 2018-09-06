@@ -8,7 +8,7 @@ from .models import *
 # from .models.rnn import *
 # from .models import *
 from .modules import *
-from .policy import *
+#from .policy import *
 from .regularizer import *
 
 """
