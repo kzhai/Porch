@@ -747,7 +747,7 @@ def main():
 
 	torch.manual_seed(settings.random_seed)
 
-	model = settings.model(**settings.model_kwargs).to(settings.device)
+	model = settings.model(device=settings.device, **settings.model_kwargs).to(settings.device)
 	if settings.model_directory is None:
 		dataset = load_datasets_to_start(input_directory=settings.input_directory,
 		                                 output_directory=settings.output_directory,

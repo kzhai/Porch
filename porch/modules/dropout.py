@@ -231,8 +231,10 @@ class Dropout(nn.Module):
 				filter = torch.bernoulli(1 - self.p.repeat(tuple(input.shape[:-1]) + (1,)))
 		else:
 			filter = None
-		filter.to(self.device)
+		#filter = filter.to(self.device)
 		self.filter = filter
+		print(self.device)
+		self.filter = self.filter.to(self.device)
 
 		# return F.dropout(input, self.p, self.training, self.inplace)
 		# return dropout(input, self.p, self.training, self.inplace)

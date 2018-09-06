@@ -156,6 +156,7 @@ def parse_recurrent_layers(input_dimension,
 	for x in range(len(dimensions) - 1):
 		assert 0 <= drop_rates[x] < 1
 		if (drop_modes[x] is not None) and (drop_rates[x] > 0):
+			print(device)
 			layers.append(drop_modes[x](p=numpy.ones(dimensions[x]) * drop_rates[x], device=device))
 
 		if recurrent_modes[x] is not None:
