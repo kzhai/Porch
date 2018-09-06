@@ -1,6 +1,5 @@
 import logging
 
-import numpy
 import torch
 import torch.nn as nn
 
@@ -47,8 +46,8 @@ class GenericRNN(nn.Module):
 		#
 
 		layers = []
-		layers.append(nn.Embedding(input_shape, embedding_dimension, _weight=torch.Tensor(
-			numpy.random.uniform(-0.1, 0.1, (input_shape, embedding_dimension)))))
+		layers.append(nn.Embedding(input_shape, embedding_dimension))
+		# _weight=torch.Tensor(numpy.random.uniform(-0.1, 0.1, (input_shape, embedding_dimension)))
 		layers += parse_recurrent_layers(
 			input_dimension=embedding_dimension,
 			dimensions=dimensions,
@@ -70,16 +69,17 @@ class GenericRNN(nn.Module):
 				self.register_parameter(name, parameter)
 		'''
 
-	# self.init_weights()
+		self.init_weights(init_scale=kwargs.get("init_scale", 0.1))
+
 	# self.forward(x=numpy.zeros((1, 10)))
 
-	def init_weights(self, init_range=0.1):
+	def init_weights(self, init_scale=0.1):
 		for layer in self.layers:
 			if isinstance(layer, nn.Linear):
 				layer.bias.data.zero_()
-				layer.weight.data.uniform_(-init_range, init_range)
+				layer.weight.data.uniform_(-init_scale, init_scale)
 			elif isinstance(layer, nn.Embedding):
-				layer.weight.data.uniform_(-init_range, init_range)
+				layer.weight.data.uniform_(-init_scale, init_scale)
 
 	def forward(self, x, *args, **kwargs):
 		# This is to recast the data type to long type, as required by embedding layer.
@@ -136,7 +136,7 @@ class GenericRNN(nn.Module):
 def initialize_recurrent_hidden_states(network, minibatch_size, method=torch.zeros, scale=1., offset=0.):
 	hiddens = []
 	for layer in network.layers:
-		#weight = next(network.parameters())
+		# weight = next(network.parameters())
 		if isinstance(layer, nn.LSTM):
 			# hiddens.append((weight.new_zeros(layer.num_layers, minibatch_size, layer.hidden_size),
 			# weight.new_zeros(layer.num_layers, minibatch_size, layer.hidden_size)))

@@ -175,8 +175,8 @@ def train_epoch(device,
 		                                         information_function_kwargs=information_function_kwargs,
 		                                         #
 		                                         *args,
-		                                         # **kwargs
-		                                         **{"hiddens": minibatch_cache.get("hiddens", None)}
+		                                         **kwargs
+		                                         #**{"hiddens": minibatch_cache.get("hiddens", None)}
 		                                         )
 
 		adaptable_optimizer = kwargs.get("adaptable_optimizer", None)
@@ -195,8 +195,8 @@ def train_epoch(device,
 			                         information_function_kwargs=information_function_kwargs,
 			                         #
 			                         *args,
-			                         # **kwargs
-			                         **{"hiddens": minibatch_cache.get("hiddens", None)}
+			                         **kwargs
+			                         #**{"hiddens": minibatch_cache.get("hiddens", None)}
 			                         )
 
 		# minibatch_time, minibatch_total_loss, minibatch_total_reg, minibatch_total_infos = train_minibatch_output
@@ -588,6 +588,8 @@ def train_model(network, dataset, settings):
 	#
 
 	optimizer = settings.optimizer(network.parameters(), **settings.optimizer_kwargs)
+	scheduler = None if settings.lr_scheduler is None else settings.lr_scheduler(optimizer,
+	                                                                             **settings.lr_scheduler_kwargs)
 
 	adaptable_parameters = []
 	for name, module in network.named_modules():
@@ -612,7 +614,7 @@ def train_model(network, dataset, settings):
 	if len(adaptable_parameters) > 0:
 		adaptable_optimizer = settings.optimizer(adaptable_parameters, **settings.optimizer_kwargs)
 		settings.train_kwargs["adaptable_optimizer"] = adaptable_optimizer
-		print(adaptable_optimizer)
+		#print(adaptable_optimizer)
 
 	#
 	#
@@ -620,6 +622,11 @@ def train_model(network, dataset, settings):
 
 	model_snapshot_marker, model_snapshot_steper = 10, 10
 	for epoch_index in range(1, settings.number_of_epochs + 1):
+		if scheduler is not None:
+			scheduler.step()
+			logger.info('optimizer: epoch {}, lr {}'.format(epoch_index, scheduler.get_lr()))
+			print('optimizer: epoch {}, lr {}'.format(epoch_index, scheduler.get_lr()))
+
 		epoch_train_time, epoch_train_loss, epoch_train_reg, epoch_train_infos = train_epoch(
 			device=settings.device,
 			network=network,
@@ -631,7 +638,6 @@ def train_model(network, dataset, settings):
 			loss_function_kwargs=settings.loss_kwargs,
 			regularizer_function_kwargs=settings.regularizer_kwargs,
 			information_function_kwargs=settings.information_kwargs,
-			# train_kwargs=settings.train_kwargs,
 			minibatch_size=settings.minibatch_size,
 			**settings.train_kwargs
 		)
@@ -755,7 +761,8 @@ def main():
 
 		dataset = load_datasets_to_resume(input_directory=settings.input_directory,
 		                                  model_directory=settings.model_directory,
-		                                  output_directory=settings.output_directory)
+		                                  output_directory=settings.output_directory,
+		                                  function_parameter_mapping=settings.data)
 
 	'''
 	for data_function in settings.data:

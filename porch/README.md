@@ -132,12 +132,14 @@ python -um porch.base \
 --minibatch_size=20 \
 --number_of_epochs=4 \
 --optimizer_kwargs=lr:20 \
+--lr_scheduler=StepLR \
+--lr_scheduler_kwargs=step_size:1,gamma:0.8 \
 --train_kwargs=clip_grad_norm:0.25 \
 --information=accuracy
 ```
 
 ```bash
-python3 -um porch.base \
+python -um porch.base \
 --model=porch.models.rnn.RNN_WordLanguageModel_test \
 --model_kwargs=input_shape:10000,embedding_dimension:650,recurrent_dimension:650,drop_rate:0.5,output_shape:10000 \
 --loss=cross_entropy \
@@ -148,7 +150,9 @@ python3 -um porch.base \
 --output_directory=./data/ptb/ \
 --minibatch_size=20 \
 --number_of_epochs=39 \
---optimizer_kwargs=lr:1 \
+--optimizer_kwargs=lr:1. \
+--lr_scheduler=StepLR \
+--lr_scheduler_kwargs=step_size:1,gamma:0.8 \
 --train_kwargs=clip_grad_norm:5 \
 --information=accuracy
 ```

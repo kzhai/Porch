@@ -33,7 +33,7 @@ __all__ = [
 	# "add_resume_options",
 	# "validate_resume_options",
 	#
-	"parse_linear_arguments",
+	# "parse_linear_arguments",
 	# "add_adaptive_options",
 	# "validate_adaptive_options",
 	#
@@ -61,15 +61,15 @@ def parse_parameter_policy(policy_string):
 	policy_tokens[0] = float(policy_tokens[0])
 	# assert policy_tokens[0] >= 0
 	if len(policy_tokens) == 1:
-		policy_tokens.append(Xpolicy.constant)
+		policy_tokens.append(porch.policy.constant)
 		return policy_tokens
 
-	policy_tokens[1] = getattr(Xpolicy, policy_tokens[1])
-	if policy_tokens[1] is Xpolicy.constant:
+	policy_tokens[1] = getattr(porch.policy, policy_tokens[1])
+	if policy_tokens[1] is porch.policy.constant:
 		assert len(policy_tokens) == 2
 		return policy_tokens
 
-	if policy_tokens[1] is Xpolicy.piecewise_constant:
+	if policy_tokens[1] is porch.policy.piecewise_constant:
 		assert len(policy_tokens) == 4
 
 		policy_tokens[2] = [float(boundary_token) for boundary_token in policy_tokens[2].split("-")]
@@ -81,9 +81,9 @@ def parse_parameter_policy(policy_string):
 		assert len(policy_tokens[2]) == len(policy_tokens[3])
 		return policy_tokens
 
-	assert policy_tokens[1] is Xpolicy.inverse_time_decay \
-	       or policy_tokens[1] is Xpolicy.natural_exp_decay \
-	       or policy_tokens[1] is Xpolicy.exponential_decay
+	assert policy_tokens[1] is porch.policy.inverse_time_decay \
+	       or policy_tokens[1] is porch.policy.natural_exp_decay \
+	       or policy_tokens[1] is porch.policy.exponential_decay
 
 	for x in range(2, 4):
 		policy_tokens[x] = float(policy_tokens[x])
@@ -138,8 +138,13 @@ def add_generic_options(model_parser):
 	model_parser.add_argument("--model_kwargs", dest="model_kwargs", action='store', default="",
 	                          help="model kwargs specified for neural network model [None]")
 
+	model_parser.add_argument("--lr_scheduler", dest="lr_scheduler", action='store', default=None,
+	                          help="lr_scheduler [None] defined in torch.optim.lr_scheduler")
+	model_parser.add_argument("--lr_scheduler_kwargs", dest="lr_scheduler_kwargs", action='store', default="",
+	                          help="lr_scheduler kwargs specified for lr_scheduler algorithm [None], consult the api for more info")
+
 	model_parser.add_argument("--optimizer", dest="optimizer", action='store', default="SGD",
-	                          help="optimizer algorithm [SGD] defined in torch.optim or porch.optim")
+	                          help="optimizer algorithm [SGD] defined in torch.optim")
 	model_parser.add_argument("--optimizer_kwargs", dest='optimizer_kwargs', action='store',
 	                          default="lr{}1e-3{}momentum{}0.9".format(specs_deliminator, param_deliminator,
 	                                                                   specs_deliminator),
@@ -164,7 +169,7 @@ def add_generic_options(model_parser):
 	                          default=0, help="max norm constraint [0 - None]")
 	'''
 
-	#model_parser.add_argument('--device', dest="device", action='store', default="cuda", help='device [cuda]')
+	# model_parser.add_argument('--device', dest="device", action='store', default="cuda", help='device [cuda]')
 	model_parser.add_argument('--random_seed', type=int, default=-1, help='random seed (default: -1=time)')
 
 	model_parser.add_argument("--snapshot", dest='snapshot', action='append', default=[],
@@ -273,6 +278,25 @@ def validate_generic_options(arguments):
 		assert len(key_value_pair) == 2
 		model_kwargs[key_value_pair[0]] = key_value_pair[1]
 	arguments.model_kwargs = model_kwargs
+
+	'''
+	model_parser.add_argument("--lr_scheduler", dest="lr_scheduler", action='store', default=None,
+	                          help="lr_scheduler [None] defined in torch.optim.lr_scheduler")
+	model_parser.add_argument("--lr_scheduler_kwargs", dest="lr_scheduler_kwargs", action='store', default="",
+	                          help="lr_scheduler kwargs [None] defined in torch.optim.lr_scheduler")
+	'''
+
+	arguments.lr_scheduler = None if arguments.lr_scheduler is None else getattr(torch.optim.lr_scheduler,
+	                                                                             arguments.lr_scheduler)
+	lr_scheduler_kwargs = {}
+	lr_scheduler_kwargs_tokens = arguments.lr_scheduler_kwargs.split(param_deliminator)
+	for lr_scheduler_kwargs_token in lr_scheduler_kwargs_tokens:
+		if len(lr_scheduler_kwargs_token) == 0:
+			continue
+		key_value_pair = lr_scheduler_kwargs_token.split(specs_deliminator)
+		assert len(key_value_pair) == 2
+		lr_scheduler_kwargs[key_value_pair[0]] = float(key_value_pair[1])
+	arguments.lr_scheduler_kwargs = lr_scheduler_kwargs
 
 	arguments.optimizer = getattr(torch.optim, arguments.optimizer)
 	# arguments.optimizer = getattr(porch.optim, arguments.optimizer)
@@ -387,7 +411,7 @@ def validate_resume_options(arguments):
 	return arguments
 '''
 
-
+'''
 def add_adaptive_options(model_parser):
 	# from . import add_discriminative_options
 	# model_parser = add_discriminative_options()
@@ -495,16 +519,16 @@ def validate_dropout_arguments(arguments, number_of_layers):
 		                                                             "VariationalDropoutTypeALayer",
 		                                                             "VariationalDropoutTypeBLayer"}:
 			if Xregularization.kl_divergence_kingma not in arguments.regularizer:
-				arguments.regularizer[Xregularization.kl_divergence_kingma] = [1.0, Xpolicy.constant]
+				arguments.regularizer[Xregularization.kl_divergence_kingma] = [1.0, policy.constant]
 			assert Xregularization.kl_divergence_kingma in arguments.regularizer
 		elif layer_activation_types[layer_activation_type_index] in {"SparseVariationalDropoutLayer"}:
 			if Xregularization.kl_divergence_sparse not in arguments.regularizer:
-				arguments.regularizer[Xregularization.kl_divergence_sparse] = [1.0, Xpolicy.constant]
+				arguments.regularizer[Xregularization.kl_divergence_sparse] = [1.0, policy.constant]
 			assert Xregularization.kl_divergence_sparse in arguments.regularizer
 		elif layer_activation_types[layer_activation_type_index] in {"AdaptiveDropoutLayer", "DynamicDropoutLayer"}:
 			if (Xregularization.rademacher_p_2_q_2 not in arguments.regularizer) and \
 					(Xregularization.rademacher_p_inf_q_1 not in arguments.regularizer):
-				arguments.regularizer[Xregularization.rademacher] = [1.0, Xpolicy.constant]
+				arguments.regularizer[Xregularization.rademacher] = [1.0, policy.constant]
 			assert (Xregularization.rademacher_p_2_q_2 in arguments.regularizer) or \
 			       (Xregularization.rademacher_p_inf_q_1 in arguments.regularizer)
 		else:
@@ -648,3 +672,4 @@ def discriminative_adaptive_resume_validator(arguments):
 	assert os.path.exists(os.path.join(arguments.model_directory, "validate.index.npy"))
 
 	return arguments
+'''

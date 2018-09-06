@@ -4,10 +4,11 @@ from .data import *
 from .debug import *
 from .loss import *
 from .models import *
-#from .models.cnn import *
-#from .models.rnn import *
-#from .models import *
+# from .models.cnn import *
+# from .models.rnn import *
+# from .models import *
 from .modules import *
+from .policy import *
 from .regularizer import *
 
 """
