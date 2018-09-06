@@ -32,6 +32,7 @@ class GenericRNN(nn.Module):
 	             drop_modes,  # ="",
 	             drop_rates,  # =""
 	             #
+	             device=torch.device("cpu"),
 	             *args, **kwargs
 	             ):
 		super(GenericRNN, self).__init__()
@@ -55,7 +56,8 @@ class GenericRNN(nn.Module):
 			recurrent_modes=recurrent_modes,
 			number_of_recurrent_layers=number_of_recurrent_layers,
 			drop_modes=drop_modes,
-			drop_rates=drop_rates
+			drop_rates=drop_rates,
+			device=device
 		)
 		self.layers = layers
 

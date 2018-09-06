@@ -1,4 +1,5 @@
 import numpy
+import torch
 import torch.nn as nn
 
 import porch
@@ -131,6 +132,7 @@ def parse_recurrent_layers(input_dimension,
                            number_of_recurrent_layers,
                            drop_modes,  # ="",
                            drop_rates,  # =""
+                           device=torch.device("cpu")
                            ):
 	dimensions = parse_to_int_sequence(string_of_ints=dimensions)
 	dimensions.insert(0, input_dimension)
@@ -154,7 +156,7 @@ def parse_recurrent_layers(input_dimension,
 	for x in range(len(dimensions) - 1):
 		assert 0 <= drop_rates[x] < 1
 		if (drop_modes[x] is not None) and (drop_rates[x] > 0):
-			layers.append(drop_modes[x](p=numpy.ones(dimensions[x]) * drop_rates[x]))
+			layers.append(drop_modes[x](p=numpy.ones(dimensions[x]) * drop_rates[x], device=device))
 
 		if recurrent_modes[x] is not None:
 			# assert activations[x] is None
