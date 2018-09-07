@@ -206,7 +206,7 @@ class VariationalBetaBernoulliDropout(VariationalBernoulliDropout):
 
 
 class Dropout(nn.Module):
-	def __init__(self, p=0.5, device=torch.device("cpu")):
+	def __init__(self, p=0.5):
 		super(Dropout, self).__init__()
 
 		if numpy.any(p < 0) or numpy.any(p > 1):
@@ -215,7 +215,7 @@ class Dropout(nn.Module):
 
 		self.p = torch.tensor(p, dtype=torch.float)
 		self.filter = None
-		self.device=device
+		#self.device=device
 
 	# self.inplace = inplace
 
@@ -224,6 +224,7 @@ class Dropout(nn.Module):
 
 	def forward(self, input):
 		if self.training:
+			#with torch.cuda.device(input.get_device()):
 			if len(self.p.shape) == 0:
 				filter = torch.bernoulli(1 - self.p.repeat(tuple(input.shape)))
 			else:
@@ -231,10 +232,12 @@ class Dropout(nn.Module):
 				filter = torch.bernoulli(1 - self.p.repeat(tuple(input.shape[:-1]) + (1,)))
 		else:
 			filter = None
-		#filter = filter.to(self.device)
+		filter = filter.to(input.device)
+		print(input.get_device(), input.device)
+		print(filter.get_device())
 		self.filter = filter
-		print(self.device)
-		self.filter = self.filter.to(self.device)
+		#print(self.device)
+		#self.filter = self.filter.to(self.device)
 
 		# return F.dropout(input, self.p, self.training, self.inplace)
 		# return dropout(input, self.p, self.training, self.inplace)

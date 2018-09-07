@@ -98,7 +98,8 @@ class MLP_test(GenericMLP):
 			input_shape=input_shape,
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
 			activations=layer_deliminator.join(["ReLU", "None"]),
-			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, porch.modules.Dropout.__name__]),
+			#drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, porch.modules.Dropout.__name__]),
+			drop_modes=layer_deliminator.join([torch.nn.Dropout.__name__, torch.nn.Dropout.__name__]),
 			drop_rates=layer_deliminator.join(["0.2", "0.5"]),
 			*args, **kwargs
 		)

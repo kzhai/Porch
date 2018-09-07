@@ -32,7 +32,7 @@ class GenericRNN(nn.Module):
 	             drop_modes,  # ="",
 	             drop_rates,  # =""
 	             #
-	             device=torch.device("cpu"),
+	             #device=torch.device("cpu"),
 	             *args, **kwargs
 	             ):
 		super(GenericRNN, self).__init__()
@@ -57,7 +57,7 @@ class GenericRNN(nn.Module):
 			number_of_recurrent_layers=number_of_recurrent_layers,
 			drop_modes=drop_modes,
 			drop_rates=drop_rates,
-			device=device
+			#device=device
 		)
 		self.layers = layers
 
@@ -138,17 +138,17 @@ class GenericRNN(nn.Module):
 def initialize_recurrent_hidden_states(network, minibatch_size, method=torch.zeros, scale=1., offset=0.):
 	hiddens = []
 	for layer in network.layers:
-		# weight = next(network.parameters())
+		weight = next(network.parameters())
 		if isinstance(layer, nn.LSTM):
 			# hiddens.append((weight.new_zeros(layer.num_layers, minibatch_size, layer.hidden_size),
 			# weight.new_zeros(layer.num_layers, minibatch_size, layer.hidden_size)))
 			hiddens.append(
-				(torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset),
-				 torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset)))
+				(torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset).to(weight.device),
+				 torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset).to(weight.device)))
 		elif isinstance(layer, nn.GRU) or isinstance(layer, nn.RNN):
 			# hiddens.append(weight.new_zeros(layer.num_layers, minibatch_size, layer.hidden_size))
 			hiddens.append(
-				torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset))
+				torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset).to(weight.device))
 
 	return hiddens
 
@@ -170,6 +170,7 @@ class RNN_WordLanguageModel_test1(GenericRNN):
 			activations=layer_deliminator.join(["None", "None", "LogSoftmax"]),
 			recurrent_modes=layer_deliminator.join([nn.LSTM.__name__, nn.LSTM.__name__, "None"]),
 			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, "None", "None"]),
+			#drop_modes=layer_deliminator.join([torch.nn.Dropout.__name__, "None", "None"]),
 			drop_rates=layer_deliminator.join(["0.5", "0.0", "0.0"]),
 			#
 			*args, **kwargs
@@ -189,6 +190,7 @@ class RNN_WordLanguageModel_test(GenericRNN):
 	             recurrent_dimension,
 	             drop_rate,
 	             output_shape,
+                     #device=torch.device("cpu"),
 	             #
 	             *args, **kwargs
 	             ):
@@ -200,7 +202,9 @@ class RNN_WordLanguageModel_test(GenericRNN):
 			recurrent_modes=layer_deliminator.join([nn.LSTM.__name__, "None"]),
 			number_of_recurrent_layers=layer_deliminator.join(["2", "0"]),
 			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, porch.modules.Dropout.__name__]),
+			#drop_modes=layer_deliminator.join(["None", "None"]),
 			drop_rates=layer_deliminator.join(["%s" % drop_rate, "%s" % drop_rate]),
+	                #device=device,
 			#
 			*args, **kwargs
 		)

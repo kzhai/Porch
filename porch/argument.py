@@ -169,8 +169,8 @@ def add_generic_options(model_parser):
 	                          default=0, help="max norm constraint [0 - None]")
 	'''
 
-	# model_parser.add_argument('--device', dest="device", action='store', default="cuda", help='device [cuda]')
-	model_parser.add_argument('--random_seed', type=int, default=-1, help='random seed (default: -1=time)')
+	model_parser.add_argument('--device', dest="device", action='store', default="cpu", help='device [cpu]')
+	model_parser.add_argument('--random_seed', type=int, default=-1, help='random seed [-1 - time]')
 
 	model_parser.add_argument("--snapshot", dest='snapshot', action='append', default=[],
 	                          help="snapshot function [None]")
@@ -189,7 +189,7 @@ def add_generic_options(model_parser):
 
 def validate_generic_options(arguments):
 	# use_cuda = arguments.device.lower() == "cuda" and torch.cuda.is_available()
-	arguments.device = "cuda" if torch.cuda.is_available() else "cpu"
+	#arguments.device = "cuda" if torch.cuda.is_available() else "cpu"
 	arguments.device = torch.device(arguments.device)
 
 	# generic argument set snapshots
