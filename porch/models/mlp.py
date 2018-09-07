@@ -92,9 +92,9 @@ class MLP_test2(GenericMLP):
 '''
 
 
-class MLP_test(GenericMLP):
+class MLP1024_CrossEntropy(GenericMLP):
 	def __init__(self, input_shape, output_shape, *args, **kwargs):
-		super(MLP_test, self).__init__(
+		super(MLP1024_CrossEntropy, self).__init__(
 			input_shape=input_shape,
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
 			activations=layer_deliminator.join(["ReLU", "None"]),
@@ -104,10 +104,22 @@ class MLP_test(GenericMLP):
 			*args, **kwargs
 		)
 
-
-class MLP_GaussianDropout_test(GenericMLP):
+class MLP1024_NLL(GenericMLP):
 	def __init__(self, input_shape, output_shape, *args, **kwargs):
-		super(MLP_GaussianDropout_test, self).__init__(
+		super(MLP1024_NLL, self).__init__(
+			input_shape=input_shape,
+			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
+			activations=layer_deliminator.join(["ReLU", "LogSoftmax"]),
+			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, porch.modules.Dropout.__name__]),
+			#drop_modes=layer_deliminator.join([torch.nn.Dropout.__name__, torch.nn.Dropout.__name__]),
+			drop_rates=layer_deliminator.join(["0.2", "0.5"]),
+			*args, **kwargs
+		)
+
+
+class MLP1024_CrossEntropy_GaussianDropout(GenericMLP):
+	def __init__(self, input_shape, output_shape, *args, **kwargs):
+		super(MLP1024_CrossEntropy_GaussianDropout, self).__init__(
 			input_shape=input_shape,
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
 			activations=layer_deliminator.join(["ReLU", "None"]),
@@ -118,9 +130,9 @@ class MLP_GaussianDropout_test(GenericMLP):
 		)
 
 
-class MLP_VariationalGaussianDropout_test(GenericMLP):
+class MLP1024_CrossEntropy_VariationalGaussianDropout(GenericMLP):
 	def __init__(self, input_shape, output_shape, *args, **kwargs):
-		super(MLP_VariationalGaussianDropout_test, self).__init__(
+		super(MLP1024_CrossEntropy_VariationalGaussianDropout, self).__init__(
 			input_shape=input_shape,
 			dimensions=layer_deliminator.join(["1024", "%s" % output_shape]),
 			activations=layer_deliminator.join(["ReLU", "None"]),

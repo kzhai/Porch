@@ -48,11 +48,11 @@ The `--information` option specifies the information metric you want to track af
 You may stack as many information functions into the training framework.
 
 Alternatively, you could extend or implement a class with some pre-defined settings.
-For example, `porch.models.mlp.MLP_test` extends `porch.models.mlp.GenericMLP` with 1 hidden layer of 1024 `ReLU` units, 0.2 dropout rate on input layer, 0.5 dropout on hidden layer, and `cross_entropy` as the loss of the output layer.
+For example, `porch.models.mlp.MLP1024_CrossEntropy` extends `porch.models.mlp.GenericMLP` with 1 hidden layer of 1024 `ReLU` units, 0.2 dropout rate on input layer, 0.5 dropout on hidden layer, and `cross_entropy` as the loss of the output layer.
 
 ```bash
 python -um porch.base \
---model=porch.models.mlp.MLP_test \
+--model=porch.models.mlp.MLP1024_CrossEntropy \
 --model_kwargs=input_shape:784,output_shape:10 \
 --loss=cross_entropy \
 --data=loadFeatureAndLabel \
@@ -64,11 +64,11 @@ python -um porch.base \
 --information=accuracy
 ```
 
-Similarly for `porch.models.mlp.MLP_GaussianDropout_test` and `porch.models.mlp.MLP_VariationalGaussianDropout_test`, with 1 hidden layer of 1024 `ReLU` units, 0.2 dropout rate on input layer, 0.5 dropout on hidden layer, and `cross_entropy` as the loss of the output layer.
+Similarly for `porch.models.mlp.MLP1024_CrossEntropy_GaussianDropout` and `porch.models.mlp.MLP1024_CrossEntropy_VariationalGaussianDropout`, with 1 hidden layer of 1024 `ReLU` units, 0.2 dropout rate on input layer, 0.5 dropout on hidden layer, and `cross_entropy` as the loss of the output layer.
 
 ```bash
 python -um porch.base \
---model=porch.models.mlp.MLP_GaussianDropout_test \
+--model=porch.models.mlp.MLP1024_CrossEntropy_GaussianDropout \
 --model_kwargs=input_shape:784,output_shape:10 \
 --loss=cross_entropy \
 --data=loadFeatureAndLabel \
@@ -82,7 +82,7 @@ python -um porch.base \
 
 ```bash
 python -um porch.base \
---model=porch.models.mlp.MLP_VariationalGaussianDropout_test \
+--model=porch.models.mlp.MLP1024_CrossEntropy_VariationalGaussianDropout \
 --model_kwargs=input_shape:784,output_shape:10 \
 --loss=cross_entropy \
 --regularizer=variational_gaussian_dropout:5e-2 \
@@ -121,7 +121,7 @@ python -um porch.base \
 
 ```bash
 python -um porch.base \
---model=porch.models.rnn.RNN_WordLanguageModel_test \
+--model=porch.models.rnn.LSTM_LM_test \
 --model_kwargs=input_shape:33278,embedding_dimension:50,recurrent_dimension:50,drop_rate:0.5,output_shape:33278 \
 --loss=cross_entropy \
 --data=loadSequence \
@@ -140,7 +140,7 @@ python -um porch.base \
 
 ```bash
 python -um porch.base \
---model=porch.models.rnn.RNN_WordLanguageModel_test \
+--model=porch.models.rnn.LSTM_LM_test \
 --model_kwargs=input_shape:10000,embedding_dimension:650,recurrent_dimension:650,drop_rate:0.5,output_shape:10000 \
 --loss=cross_entropy \
 --data=loadSequence \

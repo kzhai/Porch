@@ -1,5 +1,4 @@
 import numpy
-import torch
 import torch.nn as nn
 
 import porch
@@ -62,7 +61,7 @@ def parse_drop_modes(drop_modes_argument):
 		if len(drop_mode) == 0 or drop_mode.lower() == "none":
 			drop_modes.append(None)
 		else:
-			#drop_modes.append(getattr(torch.nn, drop_mode))
+			# drop_modes.append(getattr(torch.nn, drop_mode))
 			drop_modes.append(getattr(porch.modules, drop_mode))
 	if len(drop_modes) == 0:
 		drop_modes.append(None)
@@ -118,10 +117,13 @@ def parse_feed_forward_layers(input_dimension,
 		assert 0 <= drop_rates[x] < 1
 		if (drop_modes[x] is not None) and (drop_rates[x] > 0):
 			layers.append(drop_modes[x](p=numpy.ones(dimensions[x]) * drop_rates[x]))
-			#layers.append(drop_modes[x](p=drop_rates[x]))
+		# layers.append(drop_modes[x](p=drop_rates[x]))
 		layers.append(nn.Linear(dimensions[x], dimensions[x + 1]))
 		if activations[x] is not None:
-			layers.append(activations[x]())
+			if activations[x] is nn.modules.activation.LogSoftmax:
+				layers.append(activations[x](dim=-1))
+			else:
+				layers.append(activations[x]())
 
 	return layers
 
@@ -133,7 +135,7 @@ def parse_recurrent_layers(input_dimension,
                            number_of_recurrent_layers,
                            drop_modes,  # ="",
                            drop_rates,  # =""
-                           #device=torch.device("cpu")
+                           # device=torch.device("cpu")
                            ):
 	dimensions = parse_to_int_sequence(string_of_ints=dimensions)
 	dimensions.insert(0, input_dimension)
@@ -157,7 +159,7 @@ def parse_recurrent_layers(input_dimension,
 	for x in range(len(dimensions) - 1):
 		assert 0 <= drop_rates[x] < 1
 		if (drop_modes[x] is not None) and (drop_rates[x] > 0):
-			#print(device)
+			# print(device)
 			layers.append(drop_modes[x](p=numpy.ones(dimensions[x]) * drop_rates[x]))
 
 		if recurrent_modes[x] is not None:
@@ -174,7 +176,10 @@ def parse_recurrent_layers(input_dimension,
 			# temp.bias.data.zero_()
 			# layers.append(temp)
 			if activations[x] is not None:
-				layers.append(activations[x]())
+				if activations[x] is nn.modules.activation.LogSoftmax:
+					layers.append(activations[x](dim=-1))
+				else:
+					layers.append(activations[x]())
 
 	return layers
 

@@ -176,7 +176,7 @@ class RNN_WordLanguageModel_test1(GenericRNN):
 			*args, **kwargs
 		)
 
-class RNN_WordLanguageModel_LogSoftmax(GenericRNN):
+class LSTM_LM_LogSoftmax(GenericRNN):
 	def __init__(self,
 	             input_shape,
 	             embedding_dimension,
@@ -186,7 +186,7 @@ class RNN_WordLanguageModel_LogSoftmax(GenericRNN):
 	             #
 	             *args, **kwargs
 	             ):
-		super(RNN_WordLanguageModel_LogSoftmax, self).__init__(
+		super(LSTM_LM_LogSoftmax, self).__init__(
 			input_shape=input_shape,
 			embedding_dimension=embedding_dimension,
 			dimensions=layer_deliminator.join(["%s" % recurrent_dimension, "%s" % output_shape]),
@@ -207,7 +207,7 @@ class RNN_WordLanguageModel_LogSoftmax(GenericRNN):
 '''
 
 
-class RNN_WordLanguageModel_test(GenericRNN):
+class LSTM_LM_test(GenericRNN):
 	def __init__(self,
 	             input_shape,
 	             embedding_dimension,
@@ -217,7 +217,7 @@ class RNN_WordLanguageModel_test(GenericRNN):
 	             #
 	             *args, **kwargs
 	             ):
-		super(RNN_WordLanguageModel_test, self).__init__(
+		super(LSTM_LM_test, self).__init__(
 			input_shape=input_shape,
 			embedding_dimension=embedding_dimension,
 			dimensions=layer_deliminator.join(["%s" % recurrent_dimension, "%s" % output_shape]),
