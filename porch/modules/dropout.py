@@ -223,6 +223,7 @@ class Dropout(nn.Module):
 		return 'p={}'.format(self.p)
 
 	def forward(self, input):
+		self.p = self.p.to(input.device)
 		if self.training:
 			#with torch.cuda.device(input.get_device()):
 			if len(self.p.shape) == 0:
@@ -233,10 +234,7 @@ class Dropout(nn.Module):
 			filter = filter.to(input.device)
 		else:
 			filter = None
-		#print(input.get_device(), input.device)
-		#print(filter.get_device())
 		self.filter = filter
-		#print(self.device)
 		#self.filter = self.filter.to(self.device)
 
 		# return F.dropout(input, self.p, self.training, self.inplace)
