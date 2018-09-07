@@ -230,9 +230,9 @@ class Dropout(nn.Module):
 			else:
 				assert self.p.shape[-1] == input.shape[-1]
 				filter = torch.bernoulli(1 - self.p.repeat(tuple(input.shape[:-1]) + (1,)))
+			filter = filter.to(input.device)
 		else:
 			filter = None
-		filter = filter.to(input.device)
 		#print(input.get_device(), input.device)
 		#print(filter.get_device())
 		self.filter = filter
