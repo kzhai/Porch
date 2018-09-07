@@ -176,6 +176,30 @@ class RNN_WordLanguageModel_test1(GenericRNN):
 			*args, **kwargs
 		)
 
+class RNN_WordLanguageModel_LogSoftmax(GenericRNN):
+	def __init__(self,
+	             input_shape,
+	             embedding_dimension,
+	             recurrent_dimension,
+	             drop_rate,
+	             output_shape,
+	             #
+	             *args, **kwargs
+	             ):
+		super(RNN_WordLanguageModel_LogSoftmax, self).__init__(
+			input_shape=input_shape,
+			embedding_dimension=embedding_dimension,
+			dimensions=layer_deliminator.join(["%s" % recurrent_dimension, "%s" % output_shape]),
+			activations=layer_deliminator.join(["None", "LogSoftmax"]),
+			recurrent_modes=layer_deliminator.join([nn.LSTM.__name__, "None"]),
+			number_of_recurrent_layers=layer_deliminator.join(["2", "0"]),
+			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, porch.modules.Dropout.__name__]),
+			#drop_modes=layer_deliminator.join(["None", "None"]),
+			drop_rates=layer_deliminator.join(["%s" % drop_rate, "%s" % drop_rate]),
+			#
+			*args, **kwargs
+		)
+
 
 '''
 @TODO: None+CrossEntropy vs. LogSoftmax+nll_loss (definitely have problem)
@@ -190,7 +214,6 @@ class RNN_WordLanguageModel_test(GenericRNN):
 	             recurrent_dimension,
 	             drop_rate,
 	             output_shape,
-                     #device=torch.device("cpu"),
 	             #
 	             *args, **kwargs
 	             ):
@@ -204,7 +227,6 @@ class RNN_WordLanguageModel_test(GenericRNN):
 			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, porch.modules.Dropout.__name__]),
 			#drop_modes=layer_deliminator.join(["None", "None"]),
 			drop_rates=layer_deliminator.join(["%s" % drop_rate, "%s" % drop_rate]),
-	                #device=device,
 			#
 			*args, **kwargs
 		)

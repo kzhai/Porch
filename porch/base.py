@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import sys
 import timeit
 
 import numpy
@@ -176,7 +177,7 @@ def train_epoch(device,
 		                                         #
 		                                         *args,
 		                                         **kwargs
-		                                         #**{"hiddens": minibatch_cache.get("hiddens", None)}
+		                                         # **{"hiddens": minibatch_cache.get("hiddens", None)}
 		                                         )
 
 		adaptable_optimizer = kwargs.get("adaptable_optimizer", None)
@@ -196,7 +197,7 @@ def train_epoch(device,
 			                         #
 			                         *args,
 			                         **kwargs
-			                         #**{"hiddens": minibatch_cache.get("hiddens", None)}
+			                         # **{"hiddens": minibatch_cache.get("hiddens", None)}
 			                         )
 
 		# minibatch_time, minibatch_total_loss, minibatch_total_reg, minibatch_total_infos = train_minibatch_output
@@ -614,7 +615,7 @@ def train_model(network, dataset, settings):
 	if len(adaptable_parameters) > 0:
 		adaptable_optimizer = settings.optimizer(adaptable_parameters, **settings.optimizer_kwargs)
 		settings.train_kwargs["adaptable_optimizer"] = adaptable_optimizer
-		#print(adaptable_optimizer)
+	# print(adaptable_optimizer)
 
 	#
 	#
@@ -735,6 +736,7 @@ def main():
 	logging.basicConfig(filename=os.path.join(settings.output_directory, "model.log"), level=logging.DEBUG,
 	                    format='%(asctime)s | %(name)s | %(levelname)s | %(message)s')
 
+	print(" ".join(sys.argv))
 	print("========== ==========", "parameters", "========== ==========")
 	for key, value in list(vars(settings).items()):
 		print("%s=%s" % (key, value))

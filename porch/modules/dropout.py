@@ -243,7 +243,7 @@ class Dropout(nn.Module):
 		return DropoutFunction.apply(input, self.p, self.filter)
 
 
-# Dropout = nn.Dropout
+# Dropout1d = nn.Dropout
 # Dropout2d = nn.Dropout2d
 # Dropout3d = nn.Dropout3d
 
