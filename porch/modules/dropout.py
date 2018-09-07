@@ -233,8 +233,8 @@ class Dropout(nn.Module):
 		else:
 			filter = None
 		filter = filter.to(input.device)
-		print(input.get_device(), input.device)
-		print(filter.get_device())
+		#print(input.get_device(), input.device)
+		#print(filter.get_device())
 		self.filter = filter
 		#print(self.device)
 		#self.filter = self.filter.to(self.device)
