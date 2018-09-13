@@ -119,24 +119,8 @@ python -um porch.base \
 
 ## Recurrent Neural Network
 
-```bash
-python -um porch.base \
---model=porch.models.rnn.LSTM_LM_test \
---model_kwargs=input_shape:33278,embedding_dimension:50,recurrent_dimension:50,drop_rate:0.5,output_shape:33278 \
---loss=cross_entropy \
---data=loadSequence \
---data=batchify,batch_size:20 \
---data=sequencify,sequence_length:35 \
---input_directory=./data/wk2/ \
---output_directory=./data/wk2/ \
---minibatch_size=20 \
---number_of_epochs=4 \
---optimizer_kwargs=lr:20 \
---lr_scheduler=StepLR \
---lr_scheduler_kwargs=step_size:1,gamma:0.8 \
---train_kwargs=clip_grad_norm:0.25 \
---information=accuracy
-```
+Similar to feed-forward neural networks, you can launch a recurrent neural network using the same command, simply refer to `porch.models.rnn` for more information.
+One testing example, `porch.models.rnn.LSTM_LM_test` extends `porch.models.rnn.GenericRNN`, simply specify the input and output parameters.
 
 ```bash
 python -um porch.base \
@@ -156,3 +140,23 @@ python -um porch.base \
 --train_kwargs=clip_grad_norm:5 \
 --information=accuracy
 ```
+
+```bash
+python -um porch.base \
+--model=porch.models.rnn.LSTM_LM_test \
+--model_kwargs=input_shape:33278,embedding_dimension:50,recurrent_dimension:50,drop_rate:0.5,output_shape:33278 \
+--loss=cross_entropy \
+--data=loadSequence \
+--data=batchify,batch_size:20 \
+--data=sequencify,sequence_length:35 \
+--input_directory=./data/wk2/ \
+--output_directory=./data/wk2/ \
+--minibatch_size=20 \
+--number_of_epochs=4 \
+--optimizer_kwargs=lr:20 \
+--lr_scheduler=StepLR \
+--lr_scheduler_kwargs=step_size:1,gamma:0.8 \
+--train_kwargs=clip_grad_norm:0.25 \
+--information=accuracy
+```
+

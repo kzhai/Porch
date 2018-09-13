@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
 	"GenericRNN",
-	"initialize_recurrent_hidden_states",
+	"initialize_hidden_states",
 ]
 
 
@@ -32,7 +32,7 @@ class GenericRNN(nn.Module):
 	             drop_modes,  # ="",
 	             drop_rates,  # =""
 	             #
-	             #device=torch.device("cpu"),
+	             # device=torch.device("cpu"),
 	             *args, **kwargs
 	             ):
 		super(GenericRNN, self).__init__()
@@ -57,7 +57,7 @@ class GenericRNN(nn.Module):
 			number_of_recurrent_layers=number_of_recurrent_layers,
 			drop_modes=drop_modes,
 			drop_rates=drop_rates,
-			#device=device
+			# device=device
 		)
 		self.layers = layers
 
@@ -93,7 +93,7 @@ class GenericRNN(nn.Module):
 		hiddens = kwargs.get("hiddens", None)
 		if hiddens is None:
 			print("Initialize hiddens to all zeros.")
-			hiddens = initialize_recurrent_hidden_states(self, x.shape[1])
+			hiddens = initialize_hidden_states(self, x.shape[1])
 
 		'''
 		for hidden in hiddens:
@@ -135,7 +135,7 @@ class GenericRNN(nn.Module):
 	'''
 
 
-def initialize_recurrent_hidden_states(network, minibatch_size, method=torch.zeros, scale=1., offset=0.):
+def initialize_hidden_states(network, minibatch_size, method=torch.zeros, scale=1., offset=0.):
 	hiddens = []
 	for layer in network.layers:
 		weight = next(network.parameters())
@@ -143,14 +143,43 @@ def initialize_recurrent_hidden_states(network, minibatch_size, method=torch.zer
 			# hiddens.append((weight.new_zeros(layer.num_layers, minibatch_size, layer.hidden_size),
 			# weight.new_zeros(layer.num_layers, minibatch_size, layer.hidden_size)))
 			hiddens.append(
-				(torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset).to(weight.device),
-				 torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset).to(weight.device)))
+				(torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset).to(
+					weight.device),
+				 torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset).to(
+					 weight.device)))
 		elif isinstance(layer, nn.GRU) or isinstance(layer, nn.RNN):
 			# hiddens.append(weight.new_zeros(layer.num_layers, minibatch_size, layer.hidden_size))
 			hiddens.append(
-				torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset).to(weight.device))
+				torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset).to(
+					weight.device))
 
 	return hiddens
+
+
+def unfold_hidden_states(network, sequence, output_function=torch.nn.functional.softmax):
+	network.eval()
+
+	hiddens_cache = []
+	outputs_cache = []
+	with torch.no_grad():
+		# assert tokens.shape[0] == 1
+		hiddens = initialize_hidden_states(network, 1)
+		hiddens_temp = porch.base.detach(hiddens)
+		kwargs = {"hiddens": hiddens}
+		hiddens_cache.append(hiddens_temp)
+		for token in sequence:
+			assert (token.shape == (1, 1))
+			output, hiddens = network(token.t(), **kwargs)
+			hiddens_temp = porch.base.detach(hiddens)
+			kwargs["hiddens"] = hiddens
+			hiddens_cache.append(hiddens_temp)
+
+			distribution = output_function(output, dim=1)
+			outputs_cache.append(porch.base.detach(distribution))
+
+	assert (len(hiddens_cache) == len(sequence) + 1)
+	assert (len(outputs_cache) == len(sequence))
+	return hiddens_cache, outputs_cache
 
 
 class RNN_WordLanguageModel_test1(GenericRNN):
@@ -170,11 +199,12 @@ class RNN_WordLanguageModel_test1(GenericRNN):
 			activations=layer_deliminator.join(["None", "None", "LogSoftmax"]),
 			recurrent_modes=layer_deliminator.join([nn.LSTM.__name__, nn.LSTM.__name__, "None"]),
 			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, "None", "None"]),
-			#drop_modes=layer_deliminator.join([torch.nn.Dropout.__name__, "None", "None"]),
+			# drop_modes=layer_deliminator.join([torch.nn.Dropout.__name__, "None", "None"]),
 			drop_rates=layer_deliminator.join(["0.5", "0.0", "0.0"]),
 			#
 			*args, **kwargs
 		)
+
 
 class LSTM_LM_LogSoftmax(GenericRNN):
 	def __init__(self,
@@ -194,7 +224,7 @@ class LSTM_LM_LogSoftmax(GenericRNN):
 			recurrent_modes=layer_deliminator.join([nn.LSTM.__name__, "None"]),
 			number_of_recurrent_layers=layer_deliminator.join(["2", "0"]),
 			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, porch.modules.Dropout.__name__]),
-			#drop_modes=layer_deliminator.join(["None", "None"]),
+			# drop_modes=layer_deliminator.join(["None", "None"]),
 			drop_rates=layer_deliminator.join(["%s" % drop_rate, "%s" % drop_rate]),
 			#
 			*args, **kwargs
@@ -202,7 +232,6 @@ class LSTM_LM_LogSoftmax(GenericRNN):
 
 
 '''
-@TODO: None+CrossEntropy vs. LogSoftmax+nll_loss (definitely have problem)
 @TODO: Tied weights
 '''
 
@@ -225,7 +254,7 @@ class LSTM_LM_test(GenericRNN):
 			recurrent_modes=layer_deliminator.join([nn.LSTM.__name__, "None"]),
 			number_of_recurrent_layers=layer_deliminator.join(["2", "0"]),
 			drop_modes=layer_deliminator.join([porch.modules.Dropout.__name__, porch.modules.Dropout.__name__]),
-			#drop_modes=layer_deliminator.join(["None", "None"]),
+			# drop_modes=layer_deliminator.join(["None", "None"]),
 			drop_rates=layer_deliminator.join(["%s" % drop_rate, "%s" % drop_rate]),
 			#
 			*args, **kwargs

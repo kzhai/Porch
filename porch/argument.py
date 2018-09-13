@@ -23,6 +23,7 @@ __all__ = [
 	#
 	"layer_deliminator",
 	"param_deliminator",
+	"specs_deliminator",
 	#
 	"add_generic_options",
 	"validate_generic_options",
@@ -189,7 +190,7 @@ def add_generic_options(model_parser):
 
 def validate_generic_options(arguments):
 	# use_cuda = arguments.device.lower() == "cuda" and torch.cuda.is_available()
-	#arguments.device = "cuda" if torch.cuda.is_available() else "cpu"
+	# arguments.device = "cuda" if torch.cuda.is_available() else "cpu"
 	arguments.device = torch.device(arguments.device)
 
 	# generic argument set snapshots
@@ -384,183 +385,9 @@ def validate_discriminative_options(arguments):
 	assert (arguments.validation_interval > 0)
 
 	return arguments
-
-
-
-def add_resume_options(model_parser):
-	# from . import add_discriminative_options
-
-	# model_parser = add_discriminative_options()
-	model_parser.add_argument("--model_file", dest="model_file", action='store', default=None,
-	                          help="model file to resume from [None]")
-
-	return model_parser
-
-
-def validate_resume_options(arguments):
-	# from . import validate_discriminative_options
-
-	# arguments = validate_discriminative_options(arguments)
-
-	# assert os.path.exists(arguments.model_directory)
-	assert os.path.exists(arguments.model_file)
-	arguments.model_directory = os.path.dirname(arguments.model_file)
-	assert os.path.exists(os.path.join(arguments.model_directory, "train.index.npy"))
-	assert os.path.exists(os.path.join(arguments.model_directory, "validate.index.npy"))
-
-	return arguments
 '''
 
 '''
-def add_adaptive_options(model_parser):
-	# from . import add_discriminative_options
-	# model_parser = add_discriminative_options()
-	# model_parser.description = "adaptive multi-layer perceptron argument"
-
-	# model argument set 1
-	model_parser.add_argument("--adaptable_learning_rate", dest="adaptable_learning_rate", action='store',
-	                          default=None, help="adaptable learning rate [None - learning_rate]")
-	model_parser.add_argument("--adaptable_training_mode", dest="adaptable_training_mode",
-	                          action='store', default="train_adaptables_networkwise",
-	                          help="train adaptables mode [train_adaptables_networkwise]")
-	# model_parser.add_argument("--adaptable_update_interval", dest="adaptable_update_interval", type=int,
-	# action='store', default=1, help="adatable update interval [1]")
-
-	return model_parser
-
-
-def parse_linear_arguments(argument):
-	linear_dimensions = [int(temp) for temp in argument.split(layer_deliminator)]
-	return linear_dimensions
-
-
-def validate_dense_arguments(arguments):
-	# model argument set 1
-	assert arguments.dense_dimensions is not None
-	dense_dimensions = arguments.dense_dimensions.split(layer_deliminator)
-	arguments.dense_dimensions = [int(dimensionality) for dimensionality in dense_dimensions]
-
-	assert arguments.dense_nonlinearities is not None
-	dense_nonlinearities = arguments.dense_nonlinearities.split(layer_deliminator)
-	arguments.dense_nonlinearities = [getattr(nonlinearities, dense_nonlinearity) for dense_nonlinearity in
-	                                  dense_nonlinearities]
-
-	assert len(arguments.dense_nonlinearities) == len(arguments.dense_dimensions)
-
-	return arguments, len(arguments.dense_dimensions)
-
-
-def validate_dropout_init_arguments(arguments, number_of_layers):
-	layer_activation_styles = arguments.layer_activation_styles
-	layer_activation_style_tokens = layer_activation_styles.split(layer_deliminator)
-	if len(layer_activation_style_tokens) == 1:
-		layer_activation_styles = [layer_activation_styles for layer_index in range(number_of_layers)]
-	elif len(layer_activation_style_tokens) == number_of_layers:
-		layer_activation_styles = layer_activation_style_tokens
-	# [float(layer_activation_parameter) for layer_activation_parameter in layer_activation_parameter_tokens]
-	assert len(layer_activation_styles) == number_of_layers
-	assert (layer_activation_style in {"uniform", "bernoulli", "beta_bernoulli", "reciprocal_beta_bernoulli",
-	                                   "reverse_reciprocal_beta_bernoulli", "mixed_beta_bernoulli"} for
-	        layer_activation_style in layer_activation_styles)
-	arguments.layer_activation_styles = layer_activation_styles
-
-	layer_activation_parameters = arguments.layer_activation_parameters
-	layer_activation_parameter_tokens = layer_activation_parameters.split(layer_deliminator)
-	if len(layer_activation_parameter_tokens) == 1:
-		layer_activation_parameters = [layer_activation_parameters for layer_index in range(number_of_layers)]
-	elif len(layer_activation_parameter_tokens) == number_of_layers:
-		layer_activation_parameters = layer_activation_parameter_tokens
-	assert len(layer_activation_parameters) == number_of_layers
-
-	for layer_index in range(number_of_layers):
-		if layer_activation_styles[layer_index] == "uniform":
-			layer_activation_parameters[layer_index] = float(layer_activation_parameters[layer_index])
-			assert layer_activation_parameters[layer_index] <= 1
-			assert layer_activation_parameters[layer_index] > 0
-		elif layer_activation_styles[layer_index] == "bernoulli":
-			layer_activation_parameters[layer_index] = float(layer_activation_parameters[layer_index])
-			assert layer_activation_parameters[layer_index] <= 1
-			assert layer_activation_parameters[layer_index] > 0
-		elif layer_activation_styles[layer_index] == "beta_bernoulli" \
-				or layer_activation_styles[layer_index] == "reciprocal_beta_bernoulli" \
-				or layer_activation_styles[layer_index] == "reverse_reciprocal_beta_bernoulli" \
-				or layer_activation_styles[layer_index] == "mixed_beta_bernoulli":
-			layer_activation_parameter_tokens = layer_activation_parameters[layer_index].split("+")
-			assert len(layer_activation_parameter_tokens) == 2, layer_activation_parameter_tokens
-			layer_activation_parameters[layer_index] = (float(layer_activation_parameter_tokens[0]),
-			                                            float(layer_activation_parameter_tokens[1]))
-			assert layer_activation_parameters[layer_index][0] > 0
-			assert layer_activation_parameters[layer_index][1] > 0
-			if layer_activation_styles[layer_index] == "mixed_beta_bernoulli":
-				assert layer_activation_parameters[layer_index][0] < 1
-	arguments.layer_activation_parameters = layer_activation_parameters
-
-	return arguments
-
-
-def validate_dropout_arguments(arguments, number_of_layers):
-	# model argument set
-	layer_activation_types = arguments.layer_activation_types
-	if layer_activation_types is None:
-		layer_activation_types = ["BernoulliDropoutLayer"] * number_of_layers
-	else:
-		layer_activation_type_tokens = layer_activation_types.split(layer_deliminator)
-		if len(layer_activation_type_tokens) == 1:
-			layer_activation_types = layer_activation_type_tokens * number_of_layers
-		else:
-			layer_activation_types = layer_activation_type_tokens
-		assert len(layer_activation_types) == number_of_layers
-	assert layer_activation_types[0] not in {"FastDropoutLayer", "VariationalDropoutTypeBLayer"}
-	for layer_activation_type_index in range(len(layer_activation_types)):
-		if layer_activation_types[layer_activation_type_index] in {"BernoulliDropoutLayer", "GaussianDropoutLayer",
-		                                                           "FastDropoutLayer"}:
-			pass
-		elif layer_activation_types[layer_activation_type_index] in {"VariationalDropoutLayer",
-		                                                             "VariationalDropoutTypeALayer",
-		                                                             "VariationalDropoutTypeBLayer"}:
-			if Xregularization.kl_divergence_kingma not in arguments.regularizer:
-				arguments.regularizer[Xregularization.kl_divergence_kingma] = [1.0, policy.constant]
-			assert Xregularization.kl_divergence_kingma in arguments.regularizer
-		elif layer_activation_types[layer_activation_type_index] in {"SparseVariationalDropoutLayer"}:
-			if Xregularization.kl_divergence_sparse not in arguments.regularizer:
-				arguments.regularizer[Xregularization.kl_divergence_sparse] = [1.0, policy.constant]
-			assert Xregularization.kl_divergence_sparse in arguments.regularizer
-		elif layer_activation_types[layer_activation_type_index] in {"AdaptiveDropoutLayer", "DynamicDropoutLayer"}:
-			if (Xregularization.rademacher_p_2_q_2 not in arguments.regularizer) and \
-					(Xregularization.rademacher_p_inf_q_1 not in arguments.regularizer):
-				arguments.regularizer[Xregularization.rademacher] = [1.0, policy.constant]
-			assert (Xregularization.rademacher_p_2_q_2 in arguments.regularizer) or \
-			       (Xregularization.rademacher_p_inf_q_1 in arguments.regularizer)
-		else:
-			logger.error("unrecognized dropout type %s..." % (layer_activation_types[layer_activation_type_index]))
-		layer_activation_types[layer_activation_type_index] = getattr(layers, layer_activation_types[
-			layer_activation_type_index])
-	arguments.layer_activation_types = layer_activation_types
-
-	arguments = validate_dropout_init_arguments(arguments, number_of_layers)
-	return arguments
-
-
-def validate_adaptive_options(arguments):
-	# from . import validate_discriminative_options
-	# arguments = validate_discriminative_options(arguments)
-
-	# model argument set 1
-	from . import parse_parameter_policy
-	# arguments.adaptable_learning_rate = parse_parameter_policy(arguments.adaptable_learning_rate)
-	if arguments.adaptable_learning_rate is None:
-		arguments.adaptable_learning_rate = arguments.learning_rate
-	else:
-		arguments.adaptable_learning_rate = parse_parameter_policy(arguments.adaptable_learning_rate)
-
-	assert arguments.adaptable_training_mode in {"train_adaptables_networkwise", "train_adaptables_layerwise",
-	                                             "train_adaptables_layerwise_in_turn"}
-
-	# assert (arguments.adaptable_update_interval >= 0)
-
-	return arguments
-
-
 def add_dynamic_options(model_parser):
 	# from . import add_adaptive_options
 	# model_parser = add_adaptive_options()
@@ -584,7 +411,6 @@ def add_dynamic_options(model_parser):
 	                          help="prune split interval [10]")
 
 	return model_parser
-
 
 def validate_dynamic_options(arguments):
 	# from . import validate_adaptive_options
@@ -622,54 +448,6 @@ def validate_dynamic_options(arguments):
 		prune_split_interval_tokens.insert(0, 0)
 	assert prune_split_interval_tokens[1] >= 0
 	arguments.prune_split_interval = prune_split_interval_tokens
-
-	return arguments
-
-
-def discriminative_adaptive_dynamic_resume_parser():
-	from . import add_dynamic_options
-
-	model_parser = add_dynamic_options()
-	model_parser.add_argument("--model_file", dest="model_file", action='store', default=None,
-	                          help="model file to resume from [None]")
-
-	return model_parser
-
-
-def discriminative_adaptive_dynamic_resume_validator(arguments):
-	from . import validate_dynamic_options
-
-	arguments = validate_dynamic_options(arguments)
-
-	# assert os.path.exists(arguments.model_directory)
-	assert os.path.exists(arguments.model_file)
-	arguments.model_directory = os.path.dirname(arguments.model_file)
-	assert os.path.exists(os.path.join(arguments.model_directory, "train.index.npy"))
-	assert os.path.exists(os.path.join(arguments.model_directory, "validate.index.npy"))
-
-	return arguments
-
-
-def discriminative_adaptive_resume_parser():
-	from . import add_adaptive_options
-
-	model_parser = add_adaptive_options()
-	model_parser.add_argument("--model_file", dest="model_file", action='store', default=None,
-	                          help="model file to resume from [None]")
-
-	return model_parser
-
-
-def discriminative_adaptive_resume_validator(arguments):
-	from . import validate_adaptive_options
-
-	arguments = validate_adaptive_options(arguments)
-
-	# assert os.path.exists(arguments.model_directory)
-	assert os.path.exists(arguments.model_file)
-	arguments.model_directory = os.path.dirname(arguments.model_file)
-	assert os.path.exists(os.path.join(arguments.model_directory, "train.index.npy"))
-	assert os.path.exists(os.path.join(arguments.model_directory, "validate.index.npy"))
 
 	return arguments
 '''
