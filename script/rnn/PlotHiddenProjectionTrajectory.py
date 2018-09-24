@@ -26,7 +26,7 @@ def scatter_plot_2D(X, tokens=None, output_file_path=None, title=None):
 
 	# assert (X.shape == Y.shape)
 	fig, ax = plt.subplots(figsize=(20, 20))
-	#ax.plot(X[:, 0], X[:, 1], 'ro', markersize=1)
+	# ax.plot(X[:, 0], X[:, 1], 'ro', markersize=1)
 	# ax.plot(Y[:, 0], Y[:, 1], 'b^')
 
 	from matplotlib.colors import ColorConverter
@@ -46,11 +46,11 @@ def scatter_plot_2D(X, tokens=None, output_file_path=None, title=None):
 				ax.plot(X[i, 0], X[i, 1], 'b*', markersize=5)
 				if i > 0:
 					ax.plot(X[i - 1, 0], X[i - 1, 1], 'ro', markersize=5)
-					#ground_truth = False
-					#linewidth = 1
-				#else:
-					#ground_truth = True
-					#linewidth = 10
+				# ground_truth = False
+				# linewidth = 1
+				# else:
+				# ground_truth = True
+				# linewidth = 10
 				color_index += 1
 			else:
 				ax.arrow(X[i - 1, 0], X[i - 1, 1], X[i, 0] - X[i - 1, 0], X[i, 1] - X[i - 1, 1], linewidth=1,
@@ -244,17 +244,33 @@ def b(tokens, data_sequence, hiddens_cache, word_to_id, id_to_word, perturb_hist
 		if len(hidden_sequence_mapping) == 0:
 			for lstm_group_index, lstm_layer_index in hiddens_cache:
 				hidden_sequence_mapping[(lstm_group_index, lstm_layer_index)] = \
-					(hiddens_cache[(lstm_group_index, lstm_layer_index)][i:i + perturb_history + len(token_ids) + 1],
+					(hiddens_cache[(lstm_group_index, lstm_layer_index)][i:i + perturb_history + len(token_ids) + 1, :],
 					 [None] + sequence)
 		else:
 			for lstm_group_index, lstm_layer_index in hiddens_cache:
 				hiddens_temp = hidden_sequence_mapping[(lstm_group_index, lstm_layer_index)][0]
 				sequence_temp = hidden_sequence_mapping[(lstm_group_index, lstm_layer_index)][1]
-
+				'''
 				hidden_sequence_mapping[(lstm_group_index, lstm_layer_index)] = \
 					(numpy.vstack((hiddens_temp, hiddens_cache[(lstm_group_index, lstm_layer_index)][
-					                             i:i + perturb_history + len(token_ids) + 1])),
+					                             i:i + perturb_history + len(token_ids) + 1, :])),
 					 sequence_temp + [None] + sequence)
+				'''
+				if type(hiddens_temp) is numpy.ndarray:
+					hiddens_temp = [hiddens_temp]
+				assert type(hiddens_temp) is list
+				hiddens_temp.append(
+					hiddens_cache[(lstm_group_index, lstm_layer_index)][i:i + perturb_history + len(token_ids) + 1, :])
+
+				hidden_sequence_mapping[(lstm_group_index, lstm_layer_index)] = \
+					(hiddens_temp, sequence_temp + [None] + sequence)
+
+	for lstm_group_index, lstm_layer_index in hidden_sequence_mapping:
+		hiddens_temp = hidden_sequence_mapping[(lstm_group_index, lstm_layer_index)][0]
+		if type(hiddens_temp) is list:
+			hiddens_temp = numpy.vstack(hiddens_temp)
+		sequence_temp = hidden_sequence_mapping[(lstm_group_index, lstm_layer_index)][1]
+		hidden_sequence_mapping[(lstm_group_index, lstm_layer_index)] = (hiddens_temp, sequence_temp)
 
 	return hidden_sequence_mapping
 
@@ -291,7 +307,7 @@ def main():
 
 		from .ComputeNNLMHiddens import import_hidden_cache
 		data_sequence = numpy.load(os.path.join(data_directory, "train.npy"))
-		#data_sequence = data_sequence[:100000]
+		#data_sequence = data_sequence[:1000]
 		hiddens_cache = import_hidden_cache(settings.hidden_cache_directory, cutoff=len(data_sequence))
 		print('Successfully load hiddens cache from {}'.format(settings.hidden_cache_directory))
 	else:
@@ -323,7 +339,7 @@ def main():
 		fields = line.split("\t")
 		tokens = fields[0].split()
 		frequency = float(fields[1]) if len(fields) >= 2 else 1.
-		if minimum_count > 0 and frequency < minimum_count:
+		if minimum_count > 0 and frequency <= minimum_count:
 			break
 
 		phrase_index += 1
@@ -379,7 +395,7 @@ def main():
 			                                phrase_index)),
 			'''
 			output_file_path = os.path.join(plot_directory,
-			                                "projection=2D,lstm_group=%d,lstm_layer=%d,phrase_index=%d.png" % (
+			                                "projection=2D,lstm_group=%d,lstm_layer=%d,index=%d.png" % (
 				                                lstm_group_index, lstm_layer_index,
 				                                phrase_index)) if plot_directory is not None else None
 			scatter_plot_2D(hiddens_project, sequence,
