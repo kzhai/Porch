@@ -144,6 +144,7 @@ def main():
 	# outputs_cache = numpy.load(probability_file)["arr_0"]
 	outputs_cache = import_output_cache(probability_directory)
 
+	'''
 	output_directory = os.path.join(settings.model_directory, output_directory_name)
 	os.mkdir(output_directory)
 	for context_window in range(settings.context_window + 1):
@@ -160,6 +161,7 @@ def main():
 		for (context, word) in context_word_probabilities:
 			output_stream.write("%s\t%s\t%s\n" % (
 				context, word, " ".join(["%g" % prob for prob in context_word_probabilities[(context, word)]])))
+	'''
 
 	end_train = timeit.default_timer()
 
