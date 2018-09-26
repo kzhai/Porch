@@ -6,7 +6,7 @@ import timeit
 import numpy
 # import scipy
 # import scipy.sparse
-import torch
+#import torch
 
 
 # import porch
@@ -148,7 +148,7 @@ def main():
 	for key, value in list(vars(settings).items()):
 		print("%s=%s" % (key, value))
 	print("========== ==========", "parameters", "========== ==========")
-	torch.manual_seed(settings.random_seed)
+	#torch.manual_seed(settings.random_seed)
 
 	#
 	#
@@ -262,9 +262,9 @@ def add_options(model_parser):
 
 
 def validate_options(arguments):
-	arguments.device = "cuda" if torch.cuda.is_available() else "cpu"
-	arguments.device = "cpu"
-	arguments.device = torch.device(arguments.device)
+	#arguments.device = "cuda" if torch.cuda.is_available() else "cpu"
+	#arguments.device = "cpu"
+	#arguments.device = torch.device(arguments.device)
 
 	assert os.path.exists(arguments.data_directory)
 	assert os.path.exists(arguments.probability_cache_directory)
