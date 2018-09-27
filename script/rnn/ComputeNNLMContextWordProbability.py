@@ -4,9 +4,11 @@ import os
 import timeit
 
 import numpy
+
+
 # import scipy
 # import scipy.sparse
-#import torch
+# import torch
 
 
 # import porch
@@ -148,7 +150,7 @@ def main():
 	for key, value in list(vars(settings).items()):
 		print("%s=%s" % (key, value))
 	print("========== ==========", "parameters", "========== ==========")
-	#torch.manual_seed(settings.random_seed)
+	# torch.manual_seed(settings.random_seed)
 
 	#
 	#
@@ -190,6 +192,8 @@ def main():
 		for word_id in id_to_word:
 			log_p_word[word_id] = numpy.logaddexp(log_p_word[word_id],
 			                                      numpy.log(outputs_cache[i][word_id] / len(data_sequence)))
+		if (i + 1) % 100000 == 0:
+			print("processed %d 1-grams..." % (i + 1))
 
 	ngram_file = os.path.join(settings.output_directory, "ngram=1.txt")
 	ngram_stream = open(ngram_file, 'w')
@@ -204,7 +208,6 @@ def main():
 	#
 
 	for context_window_size in range(1, 9):
-
 		context_candidates = generate_candidates(data_sequence=data_sequence,
 		                                         context_window_size=context_window_size,
 		                                         eos_id=eos_id,
@@ -262,9 +265,9 @@ def add_options(model_parser):
 
 
 def validate_options(arguments):
-	#arguments.device = "cuda" if torch.cuda.is_available() else "cpu"
-	#arguments.device = "cpu"
-	#arguments.device = torch.device(arguments.device)
+	# arguments.device = "cuda" if torch.cuda.is_available() else "cpu"
+	# arguments.device = "cpu"
+	# arguments.device = torch.device(arguments.device)
 
 	assert os.path.exists(arguments.data_directory)
 	assert os.path.exists(arguments.probability_cache_directory)
