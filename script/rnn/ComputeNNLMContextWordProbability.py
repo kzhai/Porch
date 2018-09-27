@@ -87,10 +87,11 @@ def generate_top_ranked_candidates(data_sequence, outputs_cache, context_window_
 '''
 
 
-def test(data_sequence, outputs_cache, context_window_size, context_candidates, id_to_word, eos_id):
+def test(data_sequence, outputs_cache, context_window_size, context_candidates, id_to_word, eos_id, normalize=True):
 	log_p_word_context = {}
 	log_p_context = {}
-	# log_normalizers = {}
+	if normalize:
+		log_normalizers = {}
 	context_window = [data_sequence[1]]
 	context_log_prob = numpy.log(outputs_cache[0][data_sequence[1]])
 	for i in range(2, len(data_sequence)):
@@ -104,8 +105,10 @@ def test(data_sequence, outputs_cache, context_window_size, context_candidates, 
 				log_p_word_context[context_ids] = {word_id: -1e3 for word_id in context_candidates[context_ids]}
 
 			log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], context_log_prob)
-			# log_normalizers[i - 1] = numpy.log(numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])]))
-			# print(log_normalizers[i - 1] )
+			if normalize:
+				log_normalizers[i - 1] = numpy.log(
+					numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])]))
+				print(log_normalizers[i - 1])
 			for candidate_id in context_candidates[context_ids]:
 				log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
 					log_p_word_context[context_ids][candidate_id],
@@ -115,19 +118,19 @@ def test(data_sequence, outputs_cache, context_window_size, context_candidates, 
 			context_window.clear()
 			context_window.append(data_sequence[i])
 			context_log_prob = numpy.log(outputs_cache[i - 1][data_sequence[i]])
-		# if i - 1 in log_normalizers:
-		# context_log_prob -= - log_normalizers[i - 1]
+			if normalize and ((i - 1) in log_normalizers):
+				context_log_prob -= - log_normalizers[i - 1]
 		else:
 			if len(context_window) == context_window_size:
 				context_window.pop(0)
 				context_log_prob -= numpy.log(
 					outputs_cache[i - context_window_size - 1][data_sequence[i - context_window_size]])
-			# if i - context_window_size - 1 in log_normalizers:
-			# context_log_prob += log_normalizers[i - context_window_size - 1]
+				if normalize and ((i - context_window_size - 1) in log_normalizers):
+					context_log_prob += log_normalizers[i - context_window_size - 1]
 			context_window.append(data_sequence[i])
 			context_log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]])
-		# if i - 1 in log_normalizers:
-		# context_log_prob -= - log_normalizers[i - 1]
+			if normalize and ((i - 1) in log_normalizers):
+				context_log_prob -= - log_normalizers[i - 1]
 
 		if (i + 1) % 100000 == 0:
 			print("processed %d %d-grams..." % (len(log_p_context), context_window_size + 1))
@@ -172,6 +175,7 @@ def main():
 	eos_word = nlm_eos
 	eos_id = word_to_id[eos_word]
 	number_of_candidates = settings.number_of_candidates
+	unsmooth = settings.unsmooth
 
 	#
 	#
@@ -222,7 +226,8 @@ def main():
 		                                         context_window_size=context_window_size,
 		                                         context_candidates=context_candidates,
 		                                         id_to_word=id_to_word,
-		                                         eos_id=eos_id)
+		                                         eos_id=eos_id,
+		                                         normalize=unsmooth)
 		#
 		#
 		#
@@ -259,7 +264,9 @@ def add_options(model_parser):
 	model_parser.add_argument('--subset', dest="subset", type=int, default=0,
 	                          help='subset (default: 0=total)')
 	model_parser.add_argument('--number_of_candidates', dest="number_of_candidates", type=int, default=0,
-	                          help='number of candidates (default: -1=time)')
+	                          help='number of candidates (default: 0=observables)')
+	model_parser.add_argument('--unsmooth', dest="unsmooth", action='store_true', default=False,
+	                          help='renormalize candidate probabilities (default: false')
 
 	return model_parser
 
