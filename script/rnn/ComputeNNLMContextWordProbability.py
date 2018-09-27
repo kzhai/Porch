@@ -186,13 +186,13 @@ def main():
 	#
 	#
 	#
-
+	'''
 	log_p_word = {word_id: -1e3 for word_id in id_to_word}
 	for i in range(len(data_sequence)):
 		for word_id in id_to_word:
 			log_p_word[word_id] = numpy.logaddexp(log_p_word[word_id],
 			                                      numpy.log(outputs_cache[i][word_id] / len(data_sequence)))
-		if (i + 1) % 100000 == 0:
+		if (i + 1) % 10000 == 0:
 			print("processed %d 1-grams..." % (i + 1))
 
 	ngram_file = os.path.join(settings.output_directory, "ngram=1.txt")
@@ -202,7 +202,7 @@ def main():
 	for word_id in log_p_word:
 		word = id_to_word[word_id] if word_id != eos_id else ngram_eos
 		ngram_stream.write("%g\t%s\n" % (numpy.log10(numpy.exp(log_p_word[word_id])), word))
-
+	'''
 	#
 	#
 	#
