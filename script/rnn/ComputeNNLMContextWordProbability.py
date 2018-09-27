@@ -108,7 +108,7 @@ def test(data_sequence, outputs_cache, context_window_size, context_candidates, 
 			if normalize:
 				log_normalizers[i - 1] = numpy.log(
 					numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])]))
-				print(log_normalizers[i - 1])
+				#print(log_normalizers[i - 1])
 			for candidate_id in context_candidates[context_ids]:
 				log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
 					log_p_word_context[context_ids][candidate_id],
