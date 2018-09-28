@@ -86,11 +86,27 @@ def generate_top_ranked_candidates(data_sequence, outputs_cache, context_window_
 	return context_candidates
 '''
 
+context = "context"
+sample = "sample"
+none = "none"
 
-def test(data_sequence, outputs_cache, context_window_size, context_candidates, id_to_word, eos_id, normalize=True):
+
+def test(data_sequence, outputs_cache, context_window_size, id_to_word, eos_id, normalize_mode=none,
+         number_of_candidates=0):
+	assert normalize_mode == none or normalize_mode == sample or normalize_mode == context
+	if normalize_mode == none or normalize_mode == context:
+		context_candidates = generate_candidates(data_sequence=data_sequence,
+		                                         context_window_size=context_window_size,
+		                                         eos_id=eos_id,
+		                                         outputs_cache=outputs_cache,
+		                                         number_of_candidates=number_of_candidates
+		                                         )
+	else:
+		context_candidates = {}
+
 	log_p_word_context = {}
 	log_p_context = {}
-	if normalize:
+	if normalize_mode == sample or normalize_mode == context:
 		log_normalizers = {}
 	context_window = [data_sequence[1]]
 	context_log_prob = numpy.log(outputs_cache[0][data_sequence[1]])
@@ -99,37 +115,63 @@ def test(data_sequence, outputs_cache, context_window_size, context_candidates, 
 
 		if len(context_window) == context_window_size:
 			context_ids = tuple(context_window)
-			assert context_ids in context_candidates, ([id_to_word[id] for id in context_ids])
-			if context_ids not in log_p_context:
-				log_p_context[context_ids] = -1e3
-				log_p_word_context[context_ids] = {word_id: -1e3 for word_id in context_candidates[context_ids]}
+			if normalize_mode == none or normalize_mode == context:
+				assert context_ids in context_candidates, ([id_to_word[id] for id in context_ids])
+				if context_ids not in log_p_context:
+					log_p_context[context_ids] = -1e3
+					log_p_word_context[context_ids] = {word_id: -1e3 for word_id in context_candidates[context_ids]}
+			else:  # normalize == sample
+				if context_ids not in context_candidates:
+					context_candidates[context_ids] = set()
+				if context_ids not in log_p_context:
+					log_p_context[context_ids] = -1e3
+					log_p_word_context[context_ids] = {}
 
 			log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], context_log_prob)
-			if normalize:
+			if normalize_mode == context:
 				log_normalizers[i - 1] = numpy.log(
 					numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])]))
-				#print(log_normalizers[i - 1])
-			for candidate_id in context_candidates[context_ids]:
-				log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
-					log_p_word_context[context_ids][candidate_id],
-					context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
+
+				for candidate_id in context_candidates[context_ids]:
+					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
+						log_p_word_context[context_ids][candidate_id],
+						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
+			elif normalize_mode == sample:
+				word_candidates = set()
+				word_candidates.add(data_sequence[i])
+				if number_of_candidates > 0:
+					for id in outputs_cache[i - 1].argsort()[::-1][:number_of_candidates]:
+						word_candidates.add(id)
+				log_normalizers[i - 1] = numpy.log(numpy.sum(outputs_cache[i - 1][list(word_candidates)]))
+
+				for candidate_id in word_candidates:
+					if candidate_id not in log_p_word_context[context_ids]:
+						log_p_word_context[context_ids][candidate_id] = -1e3
+					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
+						log_p_word_context[context_ids][candidate_id],
+						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
+			else:  # normalize == none
+				for candidate_id in context_candidates[context_ids]:
+					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
+						log_p_word_context[context_ids][candidate_id],
+						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
 
 		if data_sequence[i] == eos_id:
 			context_window.clear()
 			context_window.append(data_sequence[i])
 			context_log_prob = numpy.log(outputs_cache[i - 1][data_sequence[i]])
-			if normalize and ((i - 1) in log_normalizers):
+			if normalize_mode != none and ((i - 1) in log_normalizers):
 				context_log_prob -= - log_normalizers[i - 1]
 		else:
 			if len(context_window) == context_window_size:
 				context_window.pop(0)
 				context_log_prob -= numpy.log(
 					outputs_cache[i - context_window_size - 1][data_sequence[i - context_window_size]])
-				if normalize and ((i - context_window_size - 1) in log_normalizers):
+				if normalize_mode != none and ((i - context_window_size - 1) in log_normalizers):
 					context_log_prob += log_normalizers[i - context_window_size - 1]
 			context_window.append(data_sequence[i])
 			context_log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]])
-			if normalize and ((i - 1) in log_normalizers):
+			if normalize_mode != none and ((i - 1) in log_normalizers):
 				context_log_prob -= - log_normalizers[i - 1]
 
 		if (i + 1) % 100000 == 0:
@@ -146,7 +188,7 @@ def main():
 	model_parser = add_options(model_parser)
 
 	settings, additionals = model_parser.parse_known_args()
-	assert (len(additionals) == 0)
+	assert (len(additionals) == 0), additionals
 	settings = validate_options(settings)
 
 	print("========== ==========", "parameters", "========== ==========")
@@ -175,7 +217,7 @@ def main():
 	eos_word = nlm_eos
 	eos_id = word_to_id[eos_word]
 	number_of_candidates = settings.number_of_candidates
-	unsmooth = settings.unsmooth
+	normalize_mode = settings.normalize_mode
 
 	#
 	#
@@ -212,22 +254,16 @@ def main():
 	#
 
 	for context_window_size in range(1, 9):
-		context_candidates = generate_candidates(data_sequence=data_sequence,
-		                                         context_window_size=context_window_size,
-		                                         eos_id=eos_id,
-		                                         outputs_cache=outputs_cache,
-		                                         number_of_candidates=number_of_candidates
-		                                         )
 		#
 		#
 		#
 		log_p_word_context, log_p_context = test(data_sequence=data_sequence,
 		                                         outputs_cache=outputs_cache,
 		                                         context_window_size=context_window_size,
-		                                         context_candidates=context_candidates,
 		                                         id_to_word=id_to_word,
 		                                         eos_id=eos_id,
-		                                         normalize=unsmooth)
+		                                         normalize_mode=normalize_mode,
+		                                         number_of_candidates=number_of_candidates, )
 		#
 		#
 		#
@@ -265,8 +301,8 @@ def add_options(model_parser):
 	                          help='subset (default: 0=total)')
 	model_parser.add_argument('--number_of_candidates', dest="number_of_candidates", type=int, default=0,
 	                          help='number of candidates (default: 0=observables)')
-	model_parser.add_argument('--unsmooth', dest="unsmooth", action='store_true', default=False,
-	                          help='renormalize candidate probabilities (default: false')
+	model_parser.add_argument('--normalize_mode', dest="normalize_mode", action='store', default="none",
+	                          help='renormalize candidate probabilities (default: none')
 
 	return model_parser
 
@@ -284,6 +320,7 @@ def validate_options(arguments):
 	if arguments.random_seed < 0:
 		arguments.random_seed = datetime.datetime.now().microsecond
 	assert arguments.subset >= 0
+	assert arguments.normalize_mode in set([none, sample, context])
 	# assert arguments.number_of_candidates >= 0
 	# assert arguments.context_window > 0
 	# assert arguments.segment_size > 0
