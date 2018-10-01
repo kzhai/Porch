@@ -135,7 +135,7 @@ def test(data_sequence, outputs_cache, context_window_size, id_to_word, eos_id, 
 				for candidate_id in context_candidates[context_ids]:
 					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
 						log_p_word_context[context_ids][candidate_id],
-						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
+						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]) - log_normalizers[i - 1])
 			elif normalize_mode == sample:
 				word_candidates = set()
 				word_candidates.add(data_sequence[i])
@@ -143,13 +143,13 @@ def test(data_sequence, outputs_cache, context_window_size, id_to_word, eos_id, 
 					for id in outputs_cache[i - 1].argsort()[::-1][:number_of_candidates]:
 						word_candidates.add(id)
 				log_normalizers[i - 1] = numpy.log(numpy.sum(outputs_cache[i - 1][list(word_candidates)]))
-
+				
 				for candidate_id in word_candidates:
 					if candidate_id not in log_p_word_context[context_ids]:
 						log_p_word_context[context_ids][candidate_id] = -1e3
 					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
 						log_p_word_context[context_ids][candidate_id],
-						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
+						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]) - log_normalizers[i - 1])
 			else:  # normalize == none
 				for candidate_id in context_candidates[context_ids]:
 					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
@@ -161,7 +161,7 @@ def test(data_sequence, outputs_cache, context_window_size, id_to_word, eos_id, 
 			context_window.append(data_sequence[i])
 			context_log_prob = numpy.log(outputs_cache[i - 1][data_sequence[i]])
 			if normalize_mode != none and ((i - 1) in log_normalizers):
-				context_log_prob -= - log_normalizers[i - 1]
+				context_log_prob -= log_normalizers[i - 1]
 		else:
 			if len(context_window) == context_window_size:
 				context_window.pop(0)
@@ -172,7 +172,7 @@ def test(data_sequence, outputs_cache, context_window_size, id_to_word, eos_id, 
 			context_window.append(data_sequence[i])
 			context_log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]])
 			if normalize_mode != none and ((i - 1) in log_normalizers):
-				context_log_prob -= - log_normalizers[i - 1]
+				context_log_prob -= log_normalizers[i - 1]
 
 		if (i + 1) % 100000 == 0:
 			print("processed %d %d-grams..." % (len(log_p_context), context_window_size + 1))
