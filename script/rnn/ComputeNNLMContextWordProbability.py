@@ -1,6 +1,7 @@
 # import logging
 import datetime
 import os
+import sys
 import timeit
 
 import numpy
@@ -143,7 +144,7 @@ def test(data_sequence, outputs_cache, context_window_size, id_to_word, eos_id, 
 					for id in outputs_cache[i - 1].argsort()[::-1][:number_of_candidates]:
 						word_candidates.add(id)
 				log_normalizers[i - 1] = numpy.log(numpy.sum(outputs_cache[i - 1][list(word_candidates)]))
-				
+
 				for candidate_id in word_candidates:
 					if candidate_id not in log_p_word_context[context_ids]:
 						log_p_word_context[context_ids][candidate_id] = -1e3
@@ -277,9 +278,10 @@ def main():
 			context = " ".join(context_words)
 			for word_id in log_p_word_context[context_ids]:
 				word = id_to_word[word_id] if word_id != eos_id else ngram_eos
-				ngram_stream.write("%g\t%s\n" % (
-					numpy.log10(numpy.exp(log_p_word_context[context_ids][word_id] - log_p_context[context_ids])),
-					context + " " + word))
+				log_prob = numpy.log10(numpy.exp(log_p_word_context[context_ids][word_id] - log_p_context[context_ids]))
+				if log_prob > 0:
+					sys.stdout.write("warning: %f\t%s\n" % (log_prob, context + " " + word))
+				ngram_stream.write("%f\t%s\n" % (log_prob, context + " " + word))
 
 	end_train = timeit.default_timer()
 
