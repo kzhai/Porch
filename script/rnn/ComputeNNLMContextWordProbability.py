@@ -134,6 +134,7 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 			if normalize_mode == candidates_by_context:
 				spare_probs = numpy.min(
 					outputs_cache[i - 1][list(context_candidates[context_ids])]) / context_window_size
+				spare_probs=0
 				log_normalizers[i - 1] = numpy.log(
 					numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])]) + spare_probs)
 
@@ -168,6 +169,8 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 					spare_probs = outputs_cache[i - 1][argsorts[number_of_candidates + 1]]
 				else:
 					spare_probs = outputs_cache[i - 1][argsorts[number_of_candidates]]
+				spare_probs = numpy.sum(outputs_cache[i - 1][argsorts[-100:]])
+
 				log_normalizers[i - 1] = numpy.log(numpy.sum(outputs_cache[i - 1][list(word_candidates)]) + spare_probs)
 
 				for candidate_id in word_candidates:
@@ -331,8 +334,8 @@ def main():
 				word = id_to_word[word_id] if word_id != eos_id else ngram_eos
 				log_prob = numpy.log10(numpy.exp(log_p_word_context[context_ids][word_id] - log_p_context[context_ids]))
 				if log_prob > 0:
-					sys.stdout.write("warning: g\t%s\n" % (log_prob, context + " " + word))
-				ngram_stream.write("%f\t%s\n" % (log_prob, context + " " + word))
+					sys.stdout.write("warning: %g\t%s\n" % (log_prob, context + " " + word))
+				ngram_stream.write("%g\t%s\n" % (log_prob, context + " " + word))
 
 		verify_ngrams(ngram_file)
 

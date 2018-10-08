@@ -7,32 +7,6 @@ from . import ngram_eos, ngram_sos, nlm_eos
 from . import word_context_probability_pattern, ngram_conditionals_pattern, nlm_conditionals_pattern
 
 
-def histogram(x, title=None, output_file_path=None):
-	import matplotlib.pyplot as plt
-
-	num_bins = 100
-
-	fig, ax = plt.subplots()
-
-	# the histogram of the data
-	# n, bins, patches = ax.hist(x, num_bins, normed=1)
-	n, bins, patches = ax.hist(x, num_bins)
-
-	# ax.set_xlabel(r'p_{NLM}(word|context) - p_{NGram}(word|context)')
-	# ax.set_ylabel('Probability density')
-	ax.set_xlim(-1, 1)
-
-	# Tweak spacing to prevent clipping of ylabel
-	fig.tight_layout()
-
-	if title is not None:
-		plt.title(title)
-
-	if output_file_path is None:
-		plt.show()
-	else:
-		plt.savefig(output_file_path, bbox_inches='tight')
-		plt.close()
 
 
 def parse_ngram_conditional_probabilities(context_word_prob_file, unified_eos=nlm_eos):
