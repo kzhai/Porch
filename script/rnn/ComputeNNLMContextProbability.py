@@ -1,7 +1,6 @@
 # import logging
 import datetime
 import os
-import pickle
 import timeit
 
 import numpy
@@ -9,8 +8,8 @@ import numpy
 # import scipy.sparse
 import torch
 
+
 # import porch
-from porch.argument import param_deliminator, specs_deliminator
 
 
 def main():
@@ -37,7 +36,7 @@ def main():
 	import porch.data
 	word_to_id, id_to_word = porch.data.import_vocabulary(os.path.join(settings.data_directory, "type.info"))
 	data_sequence = numpy.load(os.path.join(settings.data_directory, "train.npy"))
-	#data_sequence = data_sequence[:100]
+	#data_sequence = data_sequence[:100000]
 
 	start_train = timeit.default_timer()
 
@@ -49,41 +48,26 @@ def main():
 
 	from .ComputeNNLMOutputs import import_output_cache
 	outputs_cache = import_output_cache(settings.probability_cache_directory, cutoff=len(data_sequence))
+	print(len(outputs_cache), len(data_sequence))
+	assert len(outputs_cache) == len(data_sequence), (len(outputs_cache), len(data_sequence))
 
-	for context_window in range(1, 9):
-		context_probability = {}
-		# prob = 1.0
-		log_prob = 0
-		for i in range(1, context_window + 1):
-			# prob *= outputs_cache[i - 1][data_sequence[i]]
-			log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]])
-		context = [id_to_word[id] for id in data_sequence[1:context_window + 1]]
-		context_probability[" ".join(context)] = [log_prob]
+	target_context_ids = [word_to_id[word] for word in "workers from".split()]
 
-		for i in range(context_window + 1, len(data_sequence)):
-			log_prob -= numpy.log(outputs_cache[i - context_window - 1][data_sequence[i - context_window]])
-			log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]])
-			context.pop(0)
-			context.append(id_to_word[data_sequence[i]])
+	for i in range(1, len(data_sequence) - len(target_context_ids)):
+		found = True
+		for j in range(len(target_context_ids)):
+			if data_sequence[i + j] != target_context_ids[j]:
+				found = False
+				break
 
-			temp_context = " ".join(context)
-			if temp_context not in context_probability:
-				context_probability[temp_context] = []
-			context_probability[temp_context].append(log_prob)
+		if not found:
+			continue
 
-			if len(context_probability) % 10000 == 0:
-				print("processed %d %d-grams..." % (len(context_probability), context_window))
-
-		print("processed %d %d-grams..." % (len(context_probability), context_window))
-
-		context_probability_pkl_file = os.path.join(settings.output_directory, "context=%d.pkl"%context_window)
-		pickle.dump(context_probability, open(context_probability_pkl_file, "wb"), protocol=pickle.HIGHEST_PROTOCOL)
-
-		context_probability_txt_file = os.path.join(settings.output_directory, "context=%d.txt"%context_window)
-		context_probability_txt_stream = open(context_probability_txt_file, 'w')
-		for context in context_probability:
-			context_probability_txt_stream.write(
-				"%s\t%s\n" % (context, " ".join(["%g" % probability for probability in context_probability[context]])))
+		print(id_to_word[data_sequence[i - 1]])
+		for j in range(len(target_context_ids)):
+			print(id_to_word[data_sequence[i + j]], outputs_cache[i + j-1][data_sequence[i + j]])
+		print(id_to_word[data_sequence[i + len(target_context_ids)]],
+		      outputs_cache[i + len(target_context_ids)-1][data_sequence[i + len(target_context_ids)]])
 
 	end_train = timeit.default_timer()
 
@@ -93,10 +77,10 @@ def main():
 def add_options(model_parser):
 	model_parser.add_argument("--data_directory", dest="data_directory", action='store', default=None,
 	                          help="input directory [None]")
-	model_parser.add_argument("--probability_cache_directory", dest="probability_cache_directory", action='store', default=None,
+	model_parser.add_argument("--probability_cache_directory", dest="probability_cache_directory", action='store',
+	                          default=None,
 	                          help="probability cache directory [None]")
-	model_parser.add_argument("--output_directory", dest="output_directory", action='store', default=None,
-	                          help="input directory [None]")
+	#model_parser.add_argument("--output_directory", dest="output_directory", action='store', default=None, help="input directory [None]")
 	model_parser.add_argument('--random_seed', type=int, default=-1, help='random seed (default: -1=time)')
 
 	return model_parser
@@ -111,9 +95,9 @@ def validate_options(arguments):
 	assert os.path.exists(arguments.probability_cache_directory)
 	if arguments.random_seed < 0:
 		arguments.random_seed = datetime.datetime.now().microsecond
-	if not os.path.exists(arguments.output_directory):
-		os.mkdir(arguments.output_directory)
-	#assert arguments.context_window > 0
+	#if not os.path.exists(arguments.output_directory):
+		#os.mkdir(arguments.output_directory)
+	# assert arguments.context_window > 0
 	# assert arguments.segment_size > 0
 
 	'''

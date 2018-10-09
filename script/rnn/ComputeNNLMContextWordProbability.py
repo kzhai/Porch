@@ -27,16 +27,14 @@ def generate_candidates(data_sequence, context_window_size, eos_id, outputs_cach
 				# print([id_to_word[id] for id in context_ids])
 				context_candidates[context_ids] = set()
 
-			context_candidates[context_ids].add(word_id)
 			if outputs_cache is not None:
-				if number_of_candidates > 0:
+				if number_of_candidates >= 0:
+					context_candidates[context_ids].add(word_id)
 					for id in outputs_cache[i - 1].argsort()[::-1][:number_of_candidates]:
 						context_candidates[context_ids].add(id)
-				'''
-				elif number_of_candidates<0:
-					for id in outputs_cache[i - 1].argsort()[::-1][number_of_candidates:]:
+				else:  # number_of_candidates<0:
+					for id in outputs_cache[i - 1].argsort()[::-1][:-number_of_candidates]:
 						context_candidates[context_ids].add(id)
-				'''
 
 		if word_id == eos_id:
 			context_window.clear()
@@ -134,7 +132,7 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 			if normalize_mode == candidates_by_context:
 				spare_probs = numpy.min(
 					outputs_cache[i - 1][list(context_candidates[context_ids])]) / context_window_size
-				spare_probs=0
+				spare_probs = 0
 				log_normalizers[i - 1] = numpy.log(
 					numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])]) + spare_probs)
 
@@ -159,10 +157,15 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 				'''
 			elif normalize_mode == candidates_by_sample:
 				word_candidates = set()
-				word_candidates.add(data_sequence[i])
+
 				argsorts = outputs_cache[i - 1].argsort()[::-1]
-				if number_of_candidates > 0:
+				if number_of_candidates >= 0:
+					word_candidates.add(data_sequence[i])
 					for id in argsorts[:number_of_candidates]:
+						# outputs_cache[i - 1].argsort()[::-1][:number_of_candidates]:
+						word_candidates.add(id)
+				else:  # number_of_candidates >= 0:
+					for id in argsorts[:-number_of_candidates]:
 						# outputs_cache[i - 1].argsort()[::-1][:number_of_candidates]:
 						word_candidates.add(id)
 				if argsorts[number_of_candidates] == data_sequence[i]:
