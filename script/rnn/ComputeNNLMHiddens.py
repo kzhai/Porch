@@ -62,8 +62,47 @@ def get_hidden_states(network,
 		return directory
 
 
-def reformat_hidden_states(cache):
-	hiddens_sequence = {}
+def reformat_hidden_states(hidden_states):
+	hiddens_cache = {}
+	for token_index in range(len(hidden_states)):
+		hiddens_token = hidden_states[token_index]
+
+		for lstm_group_index in range(len(hiddens_token)):
+			hiddens_token_group = hiddens_token[lstm_group_index]
+
+			if type(hiddens_token_group) == tuple:
+				# We are dealing with LSTM layer here.
+				hiddens_token_group = hiddens_token_group[0]
+
+			for lstm_layer_index in range(hiddens_token_group.shape[0]):
+				# assert (hiddens_token_group.shape[1] == 1)
+				hiddens_token_group_layer = hiddens_token_group[lstm_layer_index]
+
+				# for sequence_index in range(hiddens_token_group.shape[1]):
+				if (lstm_group_index, lstm_layer_index) not in hiddens_cache:
+					hiddens_cache[(lstm_group_index, lstm_layer_index)] = numpy.zeros(
+						(len(hidden_states), hiddens_token_group_layer.shape[1]))
+				hiddens_cache[(lstm_group_index, lstm_layer_index)][token_index, :] = \
+					hiddens_token_group_layer.numpy()
+	return hiddens_cache
+
+'''
+def unformat_hidden_states(hiddens_cache):
+	lstm_group_indices= set()
+	lstm_layer_indices = set()
+	for lstm_group_index, lstm_layer_index in hiddens_cache:
+		lstm_group_indices.add(lstm_group_index)
+		lstm_layer_indices.add(lstm_layer_index)
+
+	hidden_states = []
+	for time_stamp in range(len(hiddens_cache[(0,0)])):
+		hidden_states.append([])
+		for lstm_group_index in range(len(lstm_group_indices)):
+			hidden_states[time_stamp] =
+			for lstm_layer_index in range(len(lstm_layer_indices)):
+			pass
+		hidden_states.append(hiddens_cache)
+
 	for token_index in range(len(cache)):
 		hiddens_token = cache[token_index]
 
@@ -85,7 +124,7 @@ def reformat_hidden_states(cache):
 				hiddens_sequence[(lstm_group_index, lstm_layer_index)][token_index, :] = \
 					hiddens_token_group_layer.numpy()
 	return hiddens_sequence
-
+'''
 
 def import_hidden_cache(hidden_cache_directory, segment_size=100000, cutoff=-1):
 	hidden_cache = None

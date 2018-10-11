@@ -1,6 +1,7 @@
 # import logging
 import datetime
 import os
+import random
 import sys
 import timeit
 
@@ -28,12 +29,9 @@ def generate_candidates(data_sequence, context_window_size, eos_id, outputs_cach
 				context_candidates[context_ids] = set()
 
 			if outputs_cache is not None:
-				if number_of_candidates >= 0:
-					context_candidates[context_ids].add(word_id)
+				context_candidates[context_ids].add(word_id)
+				if number_of_candidates > 0:
 					for id in outputs_cache[i - 1].argsort()[::-1][:number_of_candidates]:
-						context_candidates[context_ids].add(id)
-				else:  # number_of_candidates<0:
-					for id in outputs_cache[i - 1].argsort()[::-1][:-number_of_candidates]:
 						context_candidates[context_ids].add(id)
 
 		if word_id == eos_id:
@@ -157,24 +155,36 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 				'''
 			elif normalize_mode == candidates_by_sample:
 				word_candidates = set()
-
-				argsorts = outputs_cache[i - 1].argsort()[::-1]
-				if number_of_candidates >= 0:
-					word_candidates.add(data_sequence[i])
-					for id in argsorts[:number_of_candidates]:
+				word_candidates.add(data_sequence[i])
+				if number_of_candidates > 0:
+					for id in outputs_cache[i - 1].argsort()[::-1][:number_of_candidates]:
 						# outputs_cache[i - 1].argsort()[::-1][:number_of_candidates]:
 						word_candidates.add(id)
-				else:  # number_of_candidates >= 0:
-					for id in argsorts[:-number_of_candidates]:
-						# outputs_cache[i - 1].argsort()[::-1][:number_of_candidates]:
-						word_candidates.add(id)
+				'''
 				if argsorts[number_of_candidates] == data_sequence[i]:
 					spare_probs = outputs_cache[i - 1][argsorts[number_of_candidates + 1]]
 				else:
 					spare_probs = outputs_cache[i - 1][argsorts[number_of_candidates]]
-				spare_probs = numpy.sum(outputs_cache[i - 1][argsorts[-100:]])
+				'''
+				spare_probs = outputs_cache[i - 1][data_sequence[i]]
+				#negative_samples = [random.randrange(len(id_to_word)) for temp in range(100)]
+				#spare_probs = numpy.sum(outputs_cache[i - 1][negative_samples])
+				# print(negative_samples, spare_probs)
 
 				log_normalizers[i - 1] = numpy.log(numpy.sum(outputs_cache[i - 1][list(word_candidates)]) + spare_probs)
+
+				'''
+				temp_log_total = -1e3
+				for temp_word_candidate in word_candidates:
+					assert numpy.exp(log_normalizers[i - 1]) > outputs_cache[i - 1][temp_word_candidate], (
+						log_normalizers[i - 1], numpy.exp(log_normalizers[i - 1]), id_to_word[temp_word_candidate],
+						outputs_cache[i - 1][temp_word_candidate], spare_probs)
+					temp_log_total = numpy.logaddexp(temp_log_total,
+					                                 numpy.log(outputs_cache[i - 1][temp_word_candidate]))
+				assert temp_log_total <= numpy.exp(log_normalizers[i - 1]), (
+					" ".join([id_to_word[temp_id] for temp_id in context_ids]), numpy.exp(temp_log_total),
+					numpy.exp(log_p_context[context_ids]))
+				'''
 
 				for candidate_id in word_candidates:
 					if candidate_id not in log_p_word_context[context_ids]:
@@ -182,11 +192,32 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
 						log_p_word_context[context_ids][candidate_id],
 						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]) - log_normalizers[i - 1])
+					'''
+					assert log_p_word_context[context_ids][candidate_id] < log_p_context[context_ids], (
+						log_p_word_context[context_ids][candidate_id], log_p_context[context_ids],
+						id_to_word[candidate_id], " ".join([id_to_word[temp_id] for temp_id in context_window]))
+
+					print(" ".join([id_to_word[temp_id] for temp_id in context_ids]), spare_probs,
+					      " ".join([id_to_word[temp_id] for temp_id in log_p_word_context[context_ids]]),
+					      id_to_word[candidate_id], context_log_prob, numpy.log(outputs_cache[i - 1][candidate_id]),
+					      log_normalizers[i - 1])
+					assert_test(log_p_word_context, log_p_context, context_ids, id_to_word)
+					'''
 			else:  # normalize == none
 				for candidate_id in context_candidates[context_ids]:
 					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
 						log_p_word_context[context_ids][candidate_id],
 						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
+
+			#
+			#
+			#
+			'''
+			print(" ".join([id_to_word[temp_id] for temp_id in context_ids]), spare_probs,
+			      " ".join([id_to_word[temp_id] for temp_id in log_p_word_context[context_ids]]),
+			      )
+			assert_test(log_p_word_context, log_p_context, context_ids, id_to_word)
+			'''
 
 		if data_sequence[i] == eos_id:
 			context_window.clear()
@@ -205,6 +236,7 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 			context_log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]])
 			if normalize_mode != candidates_by_none and ((i - 1) in log_normalizers):
 				context_log_prob -= log_normalizers[i - 1]
+		assert context_log_prob < 0, (context_log_prob, context_window)
 
 		if (i + 1) % 100000 == 0:
 			print("processed %d %d-grams..." % (len(log_p_context), context_window_size + 1))
@@ -212,6 +244,16 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 	print("processed %d %d-grams..." % (len(log_p_context), context_window_size + 1))
 
 	return log_p_word_context, log_p_context
+
+
+def assert_test(log_p_word_context, log_p_context, context_ids, id_to_word=None):
+	temp_log_total = -1e3
+	for word_id in log_p_word_context[context_ids]:
+		assert log_p_word_context[context_ids][word_id] - log_p_context[context_ids] <= 0
+		temp_log_total = numpy.logaddexp(temp_log_total, log_p_word_context[context_ids][word_id])
+	assert temp_log_total <= log_p_context[context_ids], (
+		" ".join([id_to_word[temp_id] for temp_id in context_ids]), numpy.exp(temp_log_total),
+		numpy.exp(log_p_context[context_ids]))
 
 
 def verify_ngrams(input_file):
@@ -335,14 +377,20 @@ def main():
 			context = " ".join(context_words)
 			for word_id in log_p_word_context[context_ids]:
 				word = id_to_word[word_id] if word_id != eos_id else ngram_eos
-				log_prob = numpy.log10(numpy.exp(log_p_word_context[context_ids][word_id] - log_p_context[context_ids]))
+				# log_prob = numpy.log10(numpy.exp(log_p_word_context[context_ids][word_id] - log_p_context[context_ids]))
+				assert log_p_word_context[context_ids][word_id] - log_p_context[context_ids] <= 0
+				log_prob = (log_p_word_context[context_ids][word_id] - log_p_context[context_ids]) / numpy.log(10)
+				assert log_prob <= 0
 				if log_prob > 0:
 					sys.stdout.write("warning: %g\t%s\n" % (log_prob, context + " " + word))
 				ngram_stream.write("%g\t%s\n" % (log_prob, context + " " + word))
 
-		verify_ngrams(ngram_file)
+			#
+			#
+			#
+			#assert_test(log_p_word_context, log_p_context, context_ids, id_to_word)
 
-	# break
+		verify_ngrams(ngram_file)
 
 	end_train = timeit.default_timer()
 

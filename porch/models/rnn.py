@@ -146,7 +146,8 @@ def initialize_hidden_states(network, minibatch_size, method=torch.zeros, scale=
 				(torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset).to(
 					weight.device),
 				 torch.nn.Parameter(method(layer.num_layers, minibatch_size, layer.hidden_size) * scale - offset).to(
-					 weight.device)))
+					 weight.device))
+			)
 		elif isinstance(layer, nn.GRU) or isinstance(layer, nn.RNN):
 			# hiddens.append(weight.new_zeros(layer.num_layers, minibatch_size, layer.hidden_size))
 			hiddens.append(

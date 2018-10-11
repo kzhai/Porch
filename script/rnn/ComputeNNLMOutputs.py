@@ -16,7 +16,8 @@ from . import cache_directory_name, output_directory_name, timestamp_prefix
 
 def get_output_probability(network,
                            sequence,
-                           directory=None):
+                           directory=None,
+                           hiddens=None):
 	network.eval()
 
 	# hiddens_cache = []
@@ -24,14 +25,15 @@ def get_output_probability(network,
 		outputs_cache = []
 	with torch.no_grad():
 		# assert tokens.shape[0] == 1
-		hiddens = porch.models.rnn.initialize_hidden_states(network, 1)
+		if hiddens is None:
+			hiddens = porch.models.rnn.initialize_hidden_states(network, 1)
 		# hiddens_temp = porch.base.detach(hiddens)
 		kwargs = {"hiddens": hiddens}
 		# hiddens_cache.append(hiddens_temp)
 		for i, token in enumerate(sequence):
 			assert (token.shape == (1, 1))
 			output, hiddens = network(token.t(), **kwargs)
-			hiddens_temp = porch.base.detach(hiddens)
+			#hiddens_temp = porch.base.detach(hiddens)
 			kwargs["hiddens"] = hiddens
 			# hiddens_cache.append(hiddens_temp)
 
