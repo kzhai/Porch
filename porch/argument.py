@@ -6,6 +6,7 @@ import collections
 import datetime
 import logging
 import os
+import sys
 
 import torch
 import torch.nn
@@ -128,7 +129,7 @@ def add_generic_options(model_parser):
 	# generic argument set 3
 	model_parser.add_argument("--minibatch_size", dest="minibatch_size", type=int, action='store', default=-1,
 	                          help="mini-batch size [-1]")
-	model_parser.add_argument("--number_of_epochs", dest="number_of_epochs", type=int, action='store', default=-1,
+	model_parser.add_argument("--number_of_epochs", dest="number_of_epochs", type=int, action='store', default=0,
 	                          help="number of epochs [-1]")
 	# model_parser.add_argument("--snapshot_interval", dest="snapshot_interval", type=int, action='store', default=0,
 	# help="snapshot interval in number of epochs [0 - no snapshot]")
@@ -225,7 +226,10 @@ def validate_generic_options(arguments):
 
 	# generic argument set 3
 	assert arguments.minibatch_size > 0
-	assert arguments.number_of_epochs > 0
+	assert arguments.number_of_epochs >= 0
+	if arguments.number_of_epochs == 0:
+		logger.warning("running in evaluation mode only...")
+		sys.stderr.write("Warning: running in evaluation mode only...\n")
 	# assert arguments.snapshot_interval >= 0
 
 	# generic argument set 2

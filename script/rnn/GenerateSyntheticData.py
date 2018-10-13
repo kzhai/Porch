@@ -73,31 +73,39 @@ def main():
 	start_train = timeit.default_timer()
 
 	output_stream = open(settings.output_sequence, 'w')
+	temperature = settings.temperature
+	reset_probability = settings.reset_probability
 
 	model.eval()
-	current_token = torch.tensor([[eos_index]])
+	hiddens = porch.models.rnn.initialize_hidden_states(model, 1)
+	current_token = torch.tensor([[eos_index]], dtype=torch.long)
 
 	with torch.no_grad():
-		hiddens = porch.models.rnn.initialize_hidden_states(model, 1)
 		count = 0
 		while True:
 			kwargs = {"hiddens": hiddens}
-
 			output, hiddens = model(current_token, **kwargs)
-			prob = torch.nn.functional.softmax(output, dim=1)
-			next_token = torch.distributions.categorical.Categorical(prob).sample()
+			word_weights = output.squeeze().div(temperature).exp().cpu()
+			next_token_id = torch.multinomial(word_weights, 1)[0]
+			current_token.fill_(next_token_id)
 
-			if next_token.item() == eos_index:
+			# prob = torch.nn.functional.softmax(output, dim=1)
+			# next_token_id = torch.distributions.categorical.Categorical(prob).sample()
+
+			if next_token_id == eos_index:
 				output_stream.write("\n")
 			else:
-				output_stream.write(id_to_word[next_token.item()])
+				output_stream.write(id_to_word[next_token_id])
 				output_stream.write(" ")
 
-			if count > settings.number_of_samples and next_token.item() == eos_index:
+			if count > settings.number_of_samples and next_token_id == eos_index:
 				break
 
+			if reset_probability > 0 and numpy.random.random() < reset_probability:
+				hiddens = porch.models.rnn.initialize_hidden_states(model, 1)
+
 			count += 1
-			current_token = torch.unsqueeze(next_token, dim=1)
+			current_token = torch.unsqueeze(next_token_id, dim=1)
 
 	end_train = timeit.default_timer()
 
@@ -116,6 +124,10 @@ def add_options(model_parser):
 	model_parser.add_argument("--number_of_samples", dest="number_of_samples", type=int, action='store', default=-1,
 	                          help="number of samples [-1]")
 	model_parser.add_argument("--eos_token", dest="eos_token", action='store', default="<eos>", help="eos token")
+	model_parser.add_argument("--temperature", dest="temperature", type=float, action='store', default=1,
+	                          help="temperature [1, higher will increase diversity]")
+	model_parser.add_argument("--reset_probability", dest="reset_probability", type=float, action='store', default=0,
+	                          help="reset probability [0=never reset hidden states]")
 
 	# generic argument set 4
 	model_parser.add_argument("--model_directory", dest="model_directory", action='store', default=None,
@@ -143,6 +155,8 @@ def validate_options(arguments):
 	# generic argument set 3
 	assert arguments.number_of_samples > 0
 	# assert arguments.perturbation_tokens > 0
+	assert arguments.temperature > 1e-3
+	assert 0 <= arguments.reset_probability <= 1
 
 	# generic argument set 4
 	assert os.path.exists(arguments.model_directory)

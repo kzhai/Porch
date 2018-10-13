@@ -1,7 +1,6 @@
 # import logging
 import datetime
 import os
-import random
 import sys
 import timeit
 
@@ -104,8 +103,8 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 
 	log_p_word_context = {}
 	log_p_context = {}
-	if normalize_mode == candidates_by_sample or normalize_mode == candidates_by_context:
-		log_normalizers = {}
+	#if normalize_mode == candidates_by_sample or normalize_mode == candidates_by_context:
+	log_normalizers = {}
 	context_window = [data_sequence[1]]
 	context_log_prob = numpy.log(outputs_cache[0][data_sequence[1]])
 	for i in range(2, len(data_sequence)):
@@ -125,9 +124,9 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 					log_p_context[context_ids] = -1e3
 					log_p_word_context[context_ids] = {}
 
-			log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], context_log_prob)
-
 			if normalize_mode == candidates_by_context:
+				log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], context_log_prob)
+
 				spare_probs = numpy.min(
 					outputs_cache[i - 1][list(context_candidates[context_ids])]) / context_window_size
 				spare_probs = 0
@@ -154,6 +153,8 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 					      numpy.log(numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])])))
 				'''
 			elif normalize_mode == candidates_by_sample:
+				log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], context_log_prob)
+
 				word_candidates = set()
 				word_candidates.add(data_sequence[i])
 				if number_of_candidates > 0:
@@ -167,8 +168,8 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 					spare_probs = outputs_cache[i - 1][argsorts[number_of_candidates]]
 				'''
 				spare_probs = outputs_cache[i - 1][data_sequence[i]]
-				#negative_samples = [random.randrange(len(id_to_word)) for temp in range(100)]
-				#spare_probs = numpy.sum(outputs_cache[i - 1][negative_samples])
+				# negative_samples = [random.randrange(len(id_to_word)) for temp in range(100)]
+				# spare_probs = numpy.sum(outputs_cache[i - 1][negative_samples])
 				# print(negative_samples, spare_probs)
 
 				log_normalizers[i - 1] = numpy.log(numpy.sum(outputs_cache[i - 1][list(word_candidates)]) + spare_probs)
@@ -204,10 +205,26 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 					assert_test(log_p_word_context, log_p_context, context_ids, id_to_word)
 					'''
 			else:  # normalize == none
+				log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], context_log_prob)
 				for candidate_id in context_candidates[context_ids]:
 					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
 						log_p_word_context[context_ids][candidate_id],
 						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
+
+				interpolation = True
+				if interpolation:
+					temp_context_log_prob = context_log_prob
+					for temp_pos in range(len(context_window), 0, -1):
+						temp_context_log_prob -= numpy.log(
+							outputs_cache[i - temp_pos ][data_sequence[i - temp_pos+1]])
+						if (i - temp_pos ) in log_normalizers:
+							context_log_prob += log_normalizers[i - context_window_size ]
+
+						log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], temp_context_log_prob)
+						for candidate_id in context_candidates[context_ids]:
+							log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
+								log_p_word_context[context_ids][candidate_id],
+								temp_context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
 
 			#
 			#
@@ -385,10 +402,10 @@ def main():
 					sys.stdout.write("warning: %g\t%s\n" % (log_prob, context + " " + word))
 				ngram_stream.write("%g\t%s\n" % (log_prob, context + " " + word))
 
-			#
-			#
-			#
-			#assert_test(log_p_word_context, log_p_context, context_ids, id_to_word)
+		#
+		#
+		#
+		# assert_test(log_p_word_context, log_p_context, context_ids, id_to_word)
 
 		verify_ngrams(ngram_file)
 

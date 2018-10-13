@@ -697,6 +697,30 @@ def train_model(network, dataset, settings):
 			print('Successfully saved model state to {} after epoch {}'.format(model_file, epoch_index))
 			model_snapshot_marker += model_snapshot_steper
 
+	epoch_test_time, epoch_test_loss, epoch_test_reg, epoch_test_infos = test_epoch(
+		device=settings.device,
+		network=network,
+		dataset=test_dataset,
+		loss_functions=settings.loss,
+		regularizer_functions=settings.regularizer,
+		information_functions=settings.information,
+		loss_function_kwargs=settings.loss_kwargs,
+		regularizer_function_kwargs=settings.regularizer_kwargs,
+		information_function_kwargs=settings.information_kwargs,
+		# generative_model=settings.generative_model
+		minibatch_size=settings.minibatch_size,
+		**settings.test_kwargs
+	)
+
+	logger.info('test: duration {}s, loss {}, regularizer {}'.format(
+		epoch_test_time, epoch_test_loss, epoch_test_reg))
+	print('test: duration {:.2f}s, loss {:.2f}, regularizer {:.2f}'.format(
+		epoch_test_time, epoch_test_loss, epoch_test_reg))
+
+	for information_function, information_value in epoch_test_infos.items():
+		logger.info('test: {}={}'.format(information_function.__name__, information_value))
+		print('test: {}={}'.format(information_function.__name__, information_value))
+
 	model_file = os.path.join(settings.output_directory, 'model.pth')
 	# pickle.dump(network._neural_network, open(model_file_path, 'wb'), protocol=pickle.HIGHEST_PROTOCOL)
 	torch.save(network.state_dict(), model_file)
@@ -757,7 +781,18 @@ def main():
 	# dataset = load_datasets_to_start(input_directory=settings.input_directory, output_directory=settings.output_directory)
 	else:
 		model_file = os.path.join(settings.model_directory, "model.pth")
+		'''
+		if torch.cuda.is_available():
+			model.load_state_dict(torch.load(model_file))
+		else:
+			model.load_state_dict(torch.load(model_file, map_location={'cuda:0': 'cpu'}))
+		'''
 		model.load_state_dict(torch.load(model_file))
+
+		# after load the rnn params are not a continuous chunk of memory
+		# this makes them a continuous chunk, and will speed up forward pass
+		# model.rnn.flatten_parameters()
+
 		logger.info('Successfully load model state from {}'.format(model_file))
 		print('Successfully load model state from {}'.format(model_file))
 
