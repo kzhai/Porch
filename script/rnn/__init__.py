@@ -2,7 +2,7 @@
 
 import re
 
-cache_directory_name = "data=train,cache=softmax(output)"
+cache_directory_name = "data=train,cache=log_softmax(output)"
 output_directory_name = "data=train,cache=softmax(output),context=history"
 timestamp_prefix = "timestamp"
 

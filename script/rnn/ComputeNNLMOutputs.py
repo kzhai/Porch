@@ -37,7 +37,8 @@ def get_output_probability(network,
 			kwargs["hiddens"] = hiddens
 			# hiddens_cache.append(hiddens_temp)
 
-			distribution = torch.nn.functional.softmax(output, dim=1)
+			#distribution = torch.nn.functional.softmax(output, dim=1)
+			distribution = torch.nn.functional.log_softmax(output, dim=1)
 			# distribution = porch.base.detach(distribution)[0, :]
 			distribution = distribution.numpy()[0, :]
 			if directory is None:

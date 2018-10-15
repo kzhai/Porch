@@ -5,6 +5,8 @@ import sys
 import timeit
 
 import numpy
+import scipy
+import scipy.misc
 
 
 # import scipy
@@ -88,9 +90,10 @@ candidates_by_none = "none"
 
 
 def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_word, eos_id,
+                       temperature,
                        normalize_mode=candidates_by_none,
                        number_of_candidates=0):
-	assert normalize_mode == candidates_by_none or normalize_mode == candidates_by_sample or normalize_mode == candidates_by_context
+	# assert normalize_mode == candidates_by_none or normalize_mode == candidates_by_sample or normalize_mode == candidates_by_context
 	if normalize_mode == candidates_by_none or normalize_mode == candidates_by_context:
 		context_candidates = generate_candidates(data_sequence=data_sequence,
 		                                         context_window_size=context_window_size,
@@ -103,12 +106,17 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 
 	log_p_word_context = {}
 	log_p_context = {}
-	#if normalize_mode == candidates_by_sample or normalize_mode == candidates_by_context:
 	log_normalizers = {}
+	# log_normalizers[0] = scipy.misc.logsumexp(numpy.log(outputs_cache[0]) / temperature)
+	log_normalizers[0] = scipy.misc.logsumexp(outputs_cache[0] / temperature)
 	context_window = [data_sequence[1]]
-	context_log_prob = numpy.log(outputs_cache[0][data_sequence[1]])
+	# context_log_prob = numpy.log(outputs_cache[0][data_sequence[1]]) - log_normalizers[0]
+	context_log_prob = outputs_cache[0][data_sequence[1]] - log_normalizers[0]
 	for i in range(2, len(data_sequence)):
 		assert len(context_window) <= context_window_size
+
+		# log_normalizers[i - 1] = scipy.misc.logsumexp(numpy.log(outputs_cache[i - 1]) / temperature)
+		log_normalizers[i - 1] = scipy.misc.logsumexp(outputs_cache[i - 1] / temperature)
 
 		if len(context_window) == context_window_size:
 			context_ids = tuple(context_window)
@@ -124,35 +132,7 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 					log_p_context[context_ids] = -1e3
 					log_p_word_context[context_ids] = {}
 
-			if normalize_mode == candidates_by_context:
-				log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], context_log_prob)
-
-				spare_probs = numpy.min(
-					outputs_cache[i - 1][list(context_candidates[context_ids])]) / context_window_size
-				spare_probs = 0
-				log_normalizers[i - 1] = numpy.log(
-					numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])]) + spare_probs)
-
-				for candidate_id in context_candidates[context_ids]:
-					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
-						log_p_word_context[context_ids][candidate_id],
-						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]) - log_normalizers[i - 1])
-
-				'''
-				if " ".join([id_to_word[temp_id] for temp_id in context_ids]) == "study":
-					total_temp1 = 0
-					total_temp2 = 0
-					normalizer = numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])])
-					for candidate_id in context_candidates[context_ids]:
-						print(id_to_word[candidate_id], numpy.log(outputs_cache[i - 1][candidate_id]),
-						      log_normalizers[i - 1])
-						total_temp1 += numpy.exp(numpy.log(outputs_cache[i - 1][candidate_id]) - log_normalizers[i - 1])
-						total_temp2 += outputs_cache[i - 1][candidate_id] / normalizer
-					print("total", total_temp1, total_temp2,
-					      numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])]),
-					      numpy.log(numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])])))
-				'''
-			elif normalize_mode == candidates_by_sample:
+			if normalize_mode == candidates_by_sample:
 				log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], context_log_prob)
 
 				word_candidates = set()
@@ -161,64 +141,36 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 					for id in outputs_cache[i - 1].argsort()[::-1][:number_of_candidates]:
 						# outputs_cache[i - 1].argsort()[::-1][:number_of_candidates]:
 						word_candidates.add(id)
-				'''
-				if argsorts[number_of_candidates] == data_sequence[i]:
-					spare_probs = outputs_cache[i - 1][argsorts[number_of_candidates + 1]]
-				else:
-					spare_probs = outputs_cache[i - 1][argsorts[number_of_candidates]]
-				'''
-				spare_probs = outputs_cache[i - 1][data_sequence[i]]
-				# negative_samples = [random.randrange(len(id_to_word)) for temp in range(100)]
-				# spare_probs = numpy.sum(outputs_cache[i - 1][negative_samples])
-				# print(negative_samples, spare_probs)
 
-				log_normalizers[i - 1] = numpy.log(numpy.sum(outputs_cache[i - 1][list(word_candidates)]) + spare_probs)
-
-				'''
-				temp_log_total = -1e3
-				for temp_word_candidate in word_candidates:
-					assert numpy.exp(log_normalizers[i - 1]) > outputs_cache[i - 1][temp_word_candidate], (
-						log_normalizers[i - 1], numpy.exp(log_normalizers[i - 1]), id_to_word[temp_word_candidate],
-						outputs_cache[i - 1][temp_word_candidate], spare_probs)
-					temp_log_total = numpy.logaddexp(temp_log_total,
-					                                 numpy.log(outputs_cache[i - 1][temp_word_candidate]))
-				assert temp_log_total <= numpy.exp(log_normalizers[i - 1]), (
-					" ".join([id_to_word[temp_id] for temp_id in context_ids]), numpy.exp(temp_log_total),
-					numpy.exp(log_p_context[context_ids]))
-				'''
+				# log_normalizers[i - 1] = numpy.log(numpy.sum(outputs_cache[i - 1][list(word_candidates)]) + spare_probs)
 
 				for candidate_id in word_candidates:
 					if candidate_id not in log_p_word_context[context_ids]:
 						log_p_word_context[context_ids][candidate_id] = -1e3
 					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
 						log_p_word_context[context_ids][candidate_id],
-						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]) - log_normalizers[i - 1])
-					'''
-					assert log_p_word_context[context_ids][candidate_id] < log_p_context[context_ids], (
-						log_p_word_context[context_ids][candidate_id], log_p_context[context_ids],
-						id_to_word[candidate_id], " ".join([id_to_word[temp_id] for temp_id in context_window]))
+						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
 
-					print(" ".join([id_to_word[temp_id] for temp_id in context_ids]), spare_probs,
-					      " ".join([id_to_word[temp_id] for temp_id in log_p_word_context[context_ids]]),
-					      id_to_word[candidate_id], context_log_prob, numpy.log(outputs_cache[i - 1][candidate_id]),
-					      log_normalizers[i - 1])
-					assert_test(log_p_word_context, log_p_context, context_ids, id_to_word)
-					'''
 			else:  # normalize == none
 				log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], context_log_prob)
 				for candidate_id in context_candidates[context_ids]:
+					# log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
+					# log_p_word_context[context_ids][candidate_id],
+					# context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]) / temperature -
+					# log_normalizers[i - 1])
 					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
 						log_p_word_context[context_ids][candidate_id],
-						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
+						context_log_prob + outputs_cache[i - 1][candidate_id] / temperature -
+						log_normalizers[i - 1])
 
-				interpolation = True
+				interpolation = False
 				if interpolation:
 					temp_context_log_prob = context_log_prob
 					for temp_pos in range(len(context_window), 0, -1):
 						temp_context_log_prob -= numpy.log(
-							outputs_cache[i - temp_pos ][data_sequence[i - temp_pos+1]])
-						if (i - temp_pos ) in log_normalizers:
-							context_log_prob += log_normalizers[i - context_window_size ]
+							outputs_cache[i - temp_pos][data_sequence[i - temp_pos + 1]])
+						# if (i - temp_pos) in log_normalizers:
+						# context_log_prob += log_normalizers[i - context_window_size]
 
 						log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], temp_context_log_prob)
 						for candidate_id in context_candidates[context_ids]:
@@ -226,33 +178,30 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 								log_p_word_context[context_ids][candidate_id],
 								temp_context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
 
-			#
-			#
-			#
-			'''
-			print(" ".join([id_to_word[temp_id] for temp_id in context_ids]), spare_probs,
-			      " ".join([id_to_word[temp_id] for temp_id in log_p_word_context[context_ids]]),
-			      )
-			assert_test(log_p_word_context, log_p_context, context_ids, id_to_word)
-			'''
+		#
+		#
+		#
 
 		if data_sequence[i] == eos_id:
 			context_window.clear()
 			context_window.append(data_sequence[i])
-			context_log_prob = numpy.log(outputs_cache[i - 1][data_sequence[i]])
-			if normalize_mode != candidates_by_none and ((i - 1) in log_normalizers):
-				context_log_prob -= log_normalizers[i - 1]
+			# context_log_prob = numpy.log(outputs_cache[i - 1][data_sequence[i]])
+			# context_log_prob = numpy.log(outputs_cache[i - 1][data_sequence[i]]) / temperature - log_normalizers[i - 1]
+			context_log_prob = outputs_cache[i - 1][data_sequence[i]] / temperature - log_normalizers[i - 1]
 		else:
 			if len(context_window) == context_window_size:
 				context_window.pop(0)
-				context_log_prob -= numpy.log(
-					outputs_cache[i - context_window_size - 1][data_sequence[i - context_window_size]])
-				if normalize_mode != candidates_by_none and ((i - context_window_size - 1) in log_normalizers):
-					context_log_prob += log_normalizers[i - context_window_size - 1]
+				# context_log_prob -= numpy.log(outputs_cache[i - context_window_size - 1][data_sequence[i - context_window_size]])
+				# context_log_prob -= numpy.log(
+				# outputs_cache[i - context_window_size - 1][data_sequence[i - context_window_size]]) / temperature - \
+				# log_normalizers[i - context_window_size - 1]
+				context_log_prob -= outputs_cache[i - context_window_size - 1][
+					                    data_sequence[i - context_window_size]] / temperature - log_normalizers[
+					                    i - context_window_size - 1]
 			context_window.append(data_sequence[i])
-			context_log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]])
-			if normalize_mode != candidates_by_none and ((i - 1) in log_normalizers):
-				context_log_prob -= log_normalizers[i - 1]
+			# context_log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]])
+			#context_log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]]) / temperature - log_normalizers[i - 1]
+			context_log_prob += outputs_cache[i - 1][data_sequence[i]] / temperature - log_normalizers[i - 1]
 		assert context_log_prob < 0, (context_log_prob, context_window)
 
 		if (i + 1) % 100000 == 0:
@@ -378,6 +327,7 @@ def main():
 		                                                       context_window_size=context_window_size,
 		                                                       id_to_word=id_to_word,
 		                                                       eos_id=eos_id,
+		                                                       temperature=2,
 		                                                       normalize_mode=normalize_mode,
 		                                                       number_of_candidates=number_of_candidates,
 		                                                       )
@@ -467,6 +417,182 @@ def validate_options(arguments):
 	arguments.model_kwargs = model_kwargs
 	'''
 	return arguments
+
+
+def backup_renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_word, eos_id,
+                              normalize_mode=candidates_by_none,
+                              number_of_candidates=0):
+	assert normalize_mode == candidates_by_none or normalize_mode == candidates_by_sample or normalize_mode == candidates_by_context
+	if normalize_mode == candidates_by_none or normalize_mode == candidates_by_context:
+		context_candidates = generate_candidates(data_sequence=data_sequence,
+		                                         context_window_size=context_window_size,
+		                                         eos_id=eos_id,
+		                                         outputs_cache=outputs_cache,
+		                                         number_of_candidates=number_of_candidates
+		                                         )
+	else:
+		context_candidates = {}
+
+	log_p_word_context = {}
+	log_p_context = {}
+	# if normalize_mode == candidates_by_sample or normalize_mode == candidates_by_context:
+	log_normalizers = {}
+	context_window = [data_sequence[1]]
+	context_log_prob = numpy.log(outputs_cache[0][data_sequence[1]])
+	for i in range(2, len(data_sequence)):
+		assert len(context_window) <= context_window_size
+
+		if len(context_window) == context_window_size:
+			context_ids = tuple(context_window)
+			if normalize_mode == candidates_by_none or normalize_mode == candidates_by_context:
+				assert context_ids in context_candidates, ([id_to_word[id] for id in context_ids])
+				if context_ids not in log_p_context:
+					log_p_context[context_ids] = -1e3
+					log_p_word_context[context_ids] = {word_id: -1e3 for word_id in context_candidates[context_ids]}
+			else:  # normalize == sample
+				if context_ids not in context_candidates:
+					context_candidates[context_ids] = set()
+				if context_ids not in log_p_context:
+					log_p_context[context_ids] = -1e3
+					log_p_word_context[context_ids] = {}
+
+			if normalize_mode == candidates_by_context:
+				log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], context_log_prob)
+
+				spare_probs = numpy.min(
+					outputs_cache[i - 1][list(context_candidates[context_ids])]) / context_window_size
+				spare_probs = 0
+				log_normalizers[i - 1] = numpy.log(
+					numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])]) + spare_probs)
+
+				for candidate_id in context_candidates[context_ids]:
+					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
+						log_p_word_context[context_ids][candidate_id],
+						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]) - log_normalizers[i - 1])
+
+				'''
+				if " ".join([id_to_word[temp_id] for temp_id in context_ids]) == "study":
+					total_temp1 = 0
+					total_temp2 = 0
+					normalizer = numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])])
+					for candidate_id in context_candidates[context_ids]:
+						print(id_to_word[candidate_id], numpy.log(outputs_cache[i - 1][candidate_id]),
+						      log_normalizers[i - 1])
+						total_temp1 += numpy.exp(numpy.log(outputs_cache[i - 1][candidate_id]) - log_normalizers[i - 1])
+						total_temp2 += outputs_cache[i - 1][candidate_id] / normalizer
+					print("total", total_temp1, total_temp2,
+					      numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])]),
+					      numpy.log(numpy.sum(outputs_cache[i - 1][list(context_candidates[context_ids])])))
+				'''
+			elif normalize_mode == candidates_by_sample:
+				log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], context_log_prob)
+
+				word_candidates = set()
+				word_candidates.add(data_sequence[i])
+				if number_of_candidates > 0:
+					for id in outputs_cache[i - 1].argsort()[::-1][:number_of_candidates]:
+						# outputs_cache[i - 1].argsort()[::-1][:number_of_candidates]:
+						word_candidates.add(id)
+				'''
+				if argsorts[number_of_candidates] == data_sequence[i]:
+					spare_probs = outputs_cache[i - 1][argsorts[number_of_candidates + 1]]
+				else:
+					spare_probs = outputs_cache[i - 1][argsorts[number_of_candidates]]
+				'''
+				spare_probs = outputs_cache[i - 1][data_sequence[i]]
+				# negative_samples = [random.randrange(len(id_to_word)) for temp in range(100)]
+				# spare_probs = numpy.sum(outputs_cache[i - 1][negative_samples])
+				# print(negative_samples, spare_probs)
+
+				log_normalizers[i - 1] = numpy.log(numpy.sum(outputs_cache[i - 1][list(word_candidates)]) + spare_probs)
+
+				'''
+				temp_log_total = -1e3
+				for temp_word_candidate in word_candidates:
+					assert numpy.exp(log_normalizers[i - 1]) > outputs_cache[i - 1][temp_word_candidate], (
+						log_normalizers[i - 1], numpy.exp(log_normalizers[i - 1]), id_to_word[temp_word_candidate],
+						outputs_cache[i - 1][temp_word_candidate], spare_probs)
+					temp_log_total = numpy.logaddexp(temp_log_total,
+					                                 numpy.log(outputs_cache[i - 1][temp_word_candidate]))
+				assert temp_log_total <= numpy.exp(log_normalizers[i - 1]), (
+					" ".join([id_to_word[temp_id] for temp_id in context_ids]), numpy.exp(temp_log_total),
+					numpy.exp(log_p_context[context_ids]))
+				'''
+
+				for candidate_id in word_candidates:
+					if candidate_id not in log_p_word_context[context_ids]:
+						log_p_word_context[context_ids][candidate_id] = -1e3
+					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
+						log_p_word_context[context_ids][candidate_id],
+						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]) - log_normalizers[i - 1])
+					'''
+					assert log_p_word_context[context_ids][candidate_id] < log_p_context[context_ids], (
+						log_p_word_context[context_ids][candidate_id], log_p_context[context_ids],
+						id_to_word[candidate_id], " ".join([id_to_word[temp_id] for temp_id in context_window]))
+
+					print(" ".join([id_to_word[temp_id] for temp_id in context_ids]), spare_probs,
+					      " ".join([id_to_word[temp_id] for temp_id in log_p_word_context[context_ids]]),
+					      id_to_word[candidate_id], context_log_prob, numpy.log(outputs_cache[i - 1][candidate_id]),
+					      log_normalizers[i - 1])
+					assert_test(log_p_word_context, log_p_context, context_ids, id_to_word)
+					'''
+			else:  # normalize == none
+				log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], context_log_prob)
+				for candidate_id in context_candidates[context_ids]:
+					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
+						log_p_word_context[context_ids][candidate_id],
+						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
+
+				interpolation = True
+				if interpolation:
+					temp_context_log_prob = context_log_prob
+					for temp_pos in range(len(context_window), 0, -1):
+						temp_context_log_prob -= numpy.log(
+							outputs_cache[i - temp_pos][data_sequence[i - temp_pos + 1]])
+						if (i - temp_pos) in log_normalizers:
+							context_log_prob += log_normalizers[i - context_window_size]
+
+						log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], temp_context_log_prob)
+						for candidate_id in context_candidates[context_ids]:
+							log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
+								log_p_word_context[context_ids][candidate_id],
+								temp_context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
+
+			#
+			#
+			#
+			'''
+			print(" ".join([id_to_word[temp_id] for temp_id in context_ids]), spare_probs,
+			      " ".join([id_to_word[temp_id] for temp_id in log_p_word_context[context_ids]]),
+			      )
+			assert_test(log_p_word_context, log_p_context, context_ids, id_to_word)
+			'''
+
+		if data_sequence[i] == eos_id:
+			context_window.clear()
+			context_window.append(data_sequence[i])
+			context_log_prob = numpy.log(outputs_cache[i - 1][data_sequence[i]])
+			if normalize_mode != candidates_by_none and ((i - 1) in log_normalizers):
+				context_log_prob -= log_normalizers[i - 1]
+		else:
+			if len(context_window) == context_window_size:
+				context_window.pop(0)
+				context_log_prob -= numpy.log(
+					outputs_cache[i - context_window_size - 1][data_sequence[i - context_window_size]])
+				if normalize_mode != candidates_by_none and ((i - context_window_size - 1) in log_normalizers):
+					context_log_prob += log_normalizers[i - context_window_size - 1]
+			context_window.append(data_sequence[i])
+			context_log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]])
+			if normalize_mode != candidates_by_none and ((i - 1) in log_normalizers):
+				context_log_prob -= log_normalizers[i - 1]
+		assert context_log_prob < 0, (context_log_prob, context_window)
+
+		if (i + 1) % 100000 == 0:
+			print("processed %d %d-grams..." % (len(log_p_context), context_window_size + 1))
+
+	print("processed %d %d-grams..." % (len(log_p_context), context_window_size + 1))
+
+	return log_p_word_context, log_p_context
 
 
 if __name__ == '__main__':
