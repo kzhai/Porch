@@ -86,29 +86,29 @@ def generate_top_ranked_candidates(data_sequence, outputs_cache, context_window_
 
 candidates_by_context = "context"
 candidates_by_sample = "sample"
-candidates_by_none = "none"
+streaming_mode = "none"
 
 
 def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_word, eos_id,
-                       temperature,
-                       normalize_mode=candidates_by_none,
+                       temperatures,
+                       streaming_mode=streaming_mode,
                        number_of_candidates=0):
 	# assert normalize_mode == candidates_by_none or normalize_mode == candidates_by_sample or normalize_mode == candidates_by_context
-	if normalize_mode == candidates_by_none or normalize_mode == candidates_by_context:
+	if streaming_mode:
+		context_candidates = {}
+	else:
 		context_candidates = generate_candidates(data_sequence=data_sequence,
 		                                         context_window_size=context_window_size,
 		                                         eos_id=eos_id,
 		                                         outputs_cache=outputs_cache,
 		                                         number_of_candidates=number_of_candidates
 		                                         )
-	else:
-		context_candidates = {}
 
 	log_p_word_context = {}
 	log_p_context = {}
 	log_normalizers = {}
 	# log_normalizers[0] = scipy.misc.logsumexp(numpy.log(outputs_cache[0]) / temperature)
-	log_normalizers[0] = scipy.misc.logsumexp(outputs_cache[0] / temperature)
+	log_normalizers[0] = scipy.misc.logsumexp(outputs_cache[0] / temperatures[context_window_size])
 	context_window = [data_sequence[1]]
 	# context_log_prob = numpy.log(outputs_cache[0][data_sequence[1]]) - log_normalizers[0]
 	context_log_prob = outputs_cache[0][data_sequence[1]] - log_normalizers[0]
@@ -116,23 +116,17 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 		assert len(context_window) <= context_window_size
 
 		# log_normalizers[i - 1] = scipy.misc.logsumexp(numpy.log(outputs_cache[i - 1]) / temperature)
-		log_normalizers[i - 1] = scipy.misc.logsumexp(outputs_cache[i - 1] / temperature)
+		log_normalizers[i - 1] = scipy.misc.logsumexp(outputs_cache[i - 1] / temperatures[context_window_size])
 
 		if len(context_window) == context_window_size:
 			context_ids = tuple(context_window)
-			if normalize_mode == candidates_by_none or normalize_mode == candidates_by_context:
-				assert context_ids in context_candidates, ([id_to_word[id] for id in context_ids])
-				if context_ids not in log_p_context:
-					log_p_context[context_ids] = -1e3
-					log_p_word_context[context_ids] = {word_id: -1e3 for word_id in context_candidates[context_ids]}
-			else:  # normalize == sample
+			if streaming_mode:
 				if context_ids not in context_candidates:
 					context_candidates[context_ids] = set()
 				if context_ids not in log_p_context:
 					log_p_context[context_ids] = -1e3
 					log_p_word_context[context_ids] = {}
 
-			if normalize_mode == candidates_by_sample:
 				log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], context_log_prob)
 
 				word_candidates = set()
@@ -149,9 +143,16 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 						log_p_word_context[context_ids][candidate_id] = -1e3
 					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
 						log_p_word_context[context_ids][candidate_id],
-						context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
+						context_log_prob + outputs_cache[i - 1][candidate_id] / temperatures[context_window_size] -
+						log_normalizers[i - 1]
+					)
 
-			else:  # normalize == none
+			else:
+				assert context_ids in context_candidates, ([id_to_word[id] for id in context_ids])
+				if context_ids not in log_p_context:
+					log_p_context[context_ids] = -1e3
+					log_p_word_context[context_ids] = {word_id: -1e3 for word_id in context_candidates[context_ids]}
+
 				log_p_context[context_ids] = numpy.logaddexp(log_p_context[context_ids], context_log_prob)
 				for candidate_id in context_candidates[context_ids]:
 					# log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
@@ -160,9 +161,11 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 					# log_normalizers[i - 1])
 					log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
 						log_p_word_context[context_ids][candidate_id],
-						context_log_prob + outputs_cache[i - 1][candidate_id] / temperature -
+						context_log_prob + outputs_cache[i - 1][candidate_id] / temperatures[context_window_size] -
 						log_normalizers[i - 1])
 
+				# @TODO: change
+				'''
 				interpolation = False
 				if interpolation:
 					temp_context_log_prob = context_log_prob
@@ -177,6 +180,7 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 							log_p_word_context[context_ids][candidate_id] = numpy.logaddexp(
 								log_p_word_context[context_ids][candidate_id],
 								temp_context_log_prob + numpy.log(outputs_cache[i - 1][candidate_id]))
+				'''
 
 		#
 		#
@@ -187,7 +191,8 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 			context_window.append(data_sequence[i])
 			# context_log_prob = numpy.log(outputs_cache[i - 1][data_sequence[i]])
 			# context_log_prob = numpy.log(outputs_cache[i - 1][data_sequence[i]]) / temperature - log_normalizers[i - 1]
-			context_log_prob = outputs_cache[i - 1][data_sequence[i]] / temperature - log_normalizers[i - 1]
+			context_log_prob = outputs_cache[i - 1][data_sequence[i]] / temperatures[context_window_size] - \
+			                   log_normalizers[i - 1]
 		else:
 			if len(context_window) == context_window_size:
 				context_window.pop(0)
@@ -195,13 +200,13 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 				# context_log_prob -= numpy.log(
 				# outputs_cache[i - context_window_size - 1][data_sequence[i - context_window_size]]) / temperature - \
 				# log_normalizers[i - context_window_size - 1]
-				context_log_prob -= outputs_cache[i - context_window_size - 1][
-					                    data_sequence[i - context_window_size]] / temperature - log_normalizers[
-					                    i - context_window_size - 1]
+				context_log_prob -= outputs_cache[i - context_window_size - 1][data_sequence[i - context_window_size]] \
+				                    / temperatures[context_window_size] - log_normalizers[i - context_window_size - 1]
 			context_window.append(data_sequence[i])
 			# context_log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]])
-			#context_log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]]) / temperature - log_normalizers[i - 1]
-			context_log_prob += outputs_cache[i - 1][data_sequence[i]] / temperature - log_normalizers[i - 1]
+			# context_log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]]) / temperature - log_normalizers[i - 1]
+			context_log_prob += outputs_cache[i - 1][data_sequence[i]] / temperatures[context_window_size] - \
+			                    log_normalizers[i - 1]
 		assert context_log_prob < 0, (context_log_prob, context_window)
 
 		if (i + 1) % 100000 == 0:
@@ -282,7 +287,8 @@ def main():
 	eos_word = nlm_eos
 	eos_id = word_to_id[eos_word]
 	number_of_candidates = settings.number_of_candidates
-	normalize_mode = settings.normalize_mode
+	streaming_mode = settings.streaming
+	temperatures = settings.temperatures
 
 	#
 	#
@@ -327,8 +333,8 @@ def main():
 		                                                       context_window_size=context_window_size,
 		                                                       id_to_word=id_to_word,
 		                                                       eos_id=eos_id,
-		                                                       temperature=2,
-		                                                       normalize_mode=normalize_mode,
+		                                                       temperatures=temperatures,
+		                                                       streaming_mode=streaming_mode,
 		                                                       number_of_candidates=number_of_candidates,
 		                                                       )
 		#
@@ -375,12 +381,12 @@ def add_options(model_parser):
 
 	model_parser.add_argument('--random_seed', dest="random_seed", type=int, default=-1,
 	                          help='random seed (default: -1=time)')
-	model_parser.add_argument('--subset', dest="subset", type=int, default=0,
-	                          help='subset (default: 0=total)')
+	model_parser.add_argument('--subset', dest="subset", type=int, default=0, help='subset (default: 0=total)')
+	model_parser.add_argument('--temperatures', dest="temperatures", default="1", help='temperatures (default: 1)')
 	model_parser.add_argument('--number_of_candidates', dest="number_of_candidates", type=int, default=0,
 	                          help='number of candidates (default: 0=observables)')
-	model_parser.add_argument('--normalize_mode', dest="normalize_mode", action='store', default="none",
-	                          help='renormalize candidate probabilities (default: none')
+	model_parser.add_argument('--streaming', dest="streaming", action='store_true', default=False,
+	                          help='streaming mode (default: False)')
 
 	return model_parser
 
@@ -398,10 +404,16 @@ def validate_options(arguments):
 	if arguments.random_seed < 0:
 		arguments.random_seed = datetime.datetime.now().microsecond
 	assert arguments.subset >= 0
-	assert arguments.normalize_mode in set([candidates_by_none, candidates_by_sample, candidates_by_context])
+	# assert arguments.streaming_mode in set([streaming_mode, candidates_by_sample, candidates_by_context])
 	# assert arguments.number_of_candidates >= 0
 	# assert arguments.context_window > 0
-	# assert arguments.segment_size > 0
+	temperatures = [float(temp) for temp in arguments.temperatures.split(",")]
+	if len(temperatures) == 1:
+		temperatures *= 9
+	arguments.temperatures = temperatures
+	assert len(arguments.temperatures) == 9
+	for temperature in arguments.temperatures:
+		assert temperature > 0
 
 	'''
 	assert os.path.exists(arguments.model_directory)
@@ -420,10 +432,10 @@ def validate_options(arguments):
 
 
 def backup_renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_word, eos_id,
-                              normalize_mode=candidates_by_none,
+                              normalize_mode=streaming_mode,
                               number_of_candidates=0):
-	assert normalize_mode == candidates_by_none or normalize_mode == candidates_by_sample or normalize_mode == candidates_by_context
-	if normalize_mode == candidates_by_none or normalize_mode == candidates_by_context:
+	assert normalize_mode == streaming_mode or normalize_mode == candidates_by_sample or normalize_mode == candidates_by_context
+	if normalize_mode == streaming_mode or normalize_mode == candidates_by_context:
 		context_candidates = generate_candidates(data_sequence=data_sequence,
 		                                         context_window_size=context_window_size,
 		                                         eos_id=eos_id,
@@ -444,7 +456,7 @@ def backup_renormalize_ngrams(data_sequence, outputs_cache, context_window_size,
 
 		if len(context_window) == context_window_size:
 			context_ids = tuple(context_window)
-			if normalize_mode == candidates_by_none or normalize_mode == candidates_by_context:
+			if normalize_mode == streaming_mode or normalize_mode == candidates_by_context:
 				assert context_ids in context_candidates, ([id_to_word[id] for id in context_ids])
 				if context_ids not in log_p_context:
 					log_p_context[context_ids] = -1e3
@@ -572,18 +584,18 @@ def backup_renormalize_ngrams(data_sequence, outputs_cache, context_window_size,
 			context_window.clear()
 			context_window.append(data_sequence[i])
 			context_log_prob = numpy.log(outputs_cache[i - 1][data_sequence[i]])
-			if normalize_mode != candidates_by_none and ((i - 1) in log_normalizers):
+			if normalize_mode != streaming_mode and ((i - 1) in log_normalizers):
 				context_log_prob -= log_normalizers[i - 1]
 		else:
 			if len(context_window) == context_window_size:
 				context_window.pop(0)
 				context_log_prob -= numpy.log(
 					outputs_cache[i - context_window_size - 1][data_sequence[i - context_window_size]])
-				if normalize_mode != candidates_by_none and ((i - context_window_size - 1) in log_normalizers):
+				if normalize_mode != streaming_mode and ((i - context_window_size - 1) in log_normalizers):
 					context_log_prob += log_normalizers[i - context_window_size - 1]
 			context_window.append(data_sequence[i])
 			context_log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]])
-			if normalize_mode != candidates_by_none and ((i - 1) in log_normalizers):
+			if normalize_mode != streaming_mode and ((i - 1) in log_normalizers):
 				context_log_prob -= log_normalizers[i - 1]
 		assert context_log_prob < 0, (context_log_prob, context_window)
 
