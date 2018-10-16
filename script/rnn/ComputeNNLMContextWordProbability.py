@@ -89,6 +89,17 @@ candidates_by_sample = "sample"
 streaming_mode = "none"
 
 
+def renorm_unigrams(data_sequence, outputs_cache, id_to_word, temperatures):
+	log_p_word = numpy.zeros(len(id_to_word)) + -1e3
+	# log_p_word = {word_id: -1e3 for word_id in id_to_word}
+	for i in range(len(data_sequence)):
+		log_normalizers = scipy.misc.logsumexp(outputs_cache[i] / temperatures[0])
+		log_p_word = numpy.logaddexp(log_p_word, outputs_cache[i] / temperatures[0] - log_normalizers - numpy.log(len(data_sequence)))
+		if (i + 1) % 10000 == 0:
+			print("processed %d 1-grams..." % (i + 1))
+	return log_p_word
+
+
 def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_word, eos_id,
                        temperatures,
                        streaming_mode=streaming_mode,
@@ -300,34 +311,21 @@ def main():
 	outputs_cache = import_output_cache(settings.probability_cache_directory, cutoff=len(data_sequence))
 	print("successfully load outputs cache...")
 
-	#
-	#
-	#
-	'''
-	log_p_word = {word_id: -1e3 for word_id in id_to_word}
-	for i in range(len(data_sequence)):
-		for word_id in id_to_word:
-			log_p_word[word_id] = numpy.logaddexp(log_p_word[word_id],
-			                                      numpy.log(outputs_cache[i][word_id] / len(data_sequence)))
-		if (i + 1) % 10000 == 0:
-			print("processed %d 1-grams..." % (i + 1))
-
+	log_p_word = renorm_unigrams(data_sequence, outputs_cache, id_to_word, temperatures)
+	assert len(log_p_word)==len(id_to_word)
+	assert numpy.all(log_p_word<0)
 	ngram_file = os.path.join(settings.output_directory, "ngram=1.txt")
 	ngram_stream = open(ngram_file, 'w')
 	ngram_stream.write("\\1-grams:\n")
 	ngram_stream.write("%g\t%s\n" % (-99, ngram_sos))
-	for word_id in log_p_word:
+	for word_id in id_to_word:
 		word = id_to_word[word_id] if word_id != eos_id else ngram_eos
-		ngram_stream.write("%g\t%s\n" % (numpy.log10(numpy.exp(log_p_word[word_id])), word))
-	'''
-	#
-	#
-	#
+		#print(word_id, word)
+		#print(log_p_word[word_id], word)
+		ngram_stream.write("%g\t%s\n" % (log_p_word[word_id] / numpy.log(10), word))
+	#verify_ngrams(ngram_file)
 
 	for context_window_size in range(1, 9):
-		#
-		#
-		#
 		log_p_word_context, log_p_context = renormalize_ngrams(data_sequence=data_sequence,
 		                                                       outputs_cache=outputs_cache,
 		                                                       context_window_size=context_window_size,
@@ -337,9 +335,6 @@ def main():
 		                                                       streaming_mode=streaming_mode,
 		                                                       number_of_candidates=number_of_candidates,
 		                                                       )
-		#
-		#
-		#
 
 		ngram_file = os.path.join(settings.output_directory, "ngram=%d.txt" % (context_window_size + 1))
 		ngram_stream = open(ngram_file, 'w')
@@ -357,12 +352,6 @@ def main():
 				if log_prob > 0:
 					sys.stdout.write("warning: %g\t%s\n" % (log_prob, context + " " + word))
 				ngram_stream.write("%g\t%s\n" % (log_prob, context + " " + word))
-
-		#
-		#
-		#
-		# assert_test(log_p_word_context, log_p_context, context_ids, id_to_word)
-
 		verify_ngrams(ngram_file)
 
 	end_train = timeit.default_timer()
