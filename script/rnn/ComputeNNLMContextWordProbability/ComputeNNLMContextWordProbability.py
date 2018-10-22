@@ -8,13 +8,10 @@ import numpy
 import scipy
 import scipy.misc
 
+ngram_sos = "<s>"
+ngram_eos = "</s>"
+nlm_eos = "<eos>"
 
-# import scipy
-# import scipy.sparse
-# import torch
-
-
-# import porch
 
 def generate_candidates(data_sequence, context_window_size, eos_id, outputs_cache=None, number_of_candidates=0):
 	context_candidates = {}
@@ -89,12 +86,13 @@ candidates_by_sample = "sample"
 streaming_mode = "none"
 
 
-def renorm_unigrams(data_sequence, outputs_cache, id_to_word, temperatures):
+def renormalize_unigrams(data_sequence, outputs_cache, id_to_word, temperatures):
 	log_p_word = numpy.zeros(len(id_to_word)) + -1e3
 	# log_p_word = {word_id: -1e3 for word_id in id_to_word}
 	for i in range(len(data_sequence)):
 		log_normalizers = scipy.misc.logsumexp(outputs_cache[i] / temperatures[0])
-		log_p_word = numpy.logaddexp(log_p_word, outputs_cache[i] / temperatures[0] - log_normalizers - numpy.log(len(data_sequence)))
+		log_p_word = numpy.logaddexp(log_p_word, outputs_cache[i] / temperatures[0] - log_normalizers - numpy.log(
+			len(data_sequence)))
 		if (i + 1) % 10000 == 0:
 			print("processed %d 1-grams..." % (i + 1))
 	return log_p_word
@@ -218,7 +216,7 @@ def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_
 			# context_log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]]) / temperature - log_normalizers[i - 1]
 			context_log_prob += outputs_cache[i - 1][data_sequence[i]] / temperatures[context_window_size] - \
 			                    log_normalizers[i - 1]
-		assert context_log_prob < 0, (context_log_prob, context_window)
+		assert context_log_prob <= 0, (context_log_prob, context_window)
 
 		if (i + 1) % 100000 == 0:
 			print("processed %d %d-grams..." % (len(log_p_context), context_window_size + 1))
@@ -263,6 +261,39 @@ def verify_ngrams(input_file):
 	return
 
 
+def import_vocabulary(path):
+	stream = open(path, 'r')
+	word_to_id = {}
+	id_to_word = {}
+	for line in stream:
+		line = line.strip()
+		tokens = line.split()
+		word_to_id[tokens[0]] = len(word_to_id)
+		id_to_word[len(id_to_word)] = tokens[0]
+
+	return word_to_id, id_to_word
+
+
+def import_output_cache(probability_directory, segment_size=100000, cutoff=0):
+	outputs_cache = []
+	i = 0
+	while (True):
+		j = i + segment_size
+		input_file = os.path.join(probability_directory, "timestamp=%d-%d.npz" % (i, j - 1))
+		if not os.path.exists(input_file):
+			break
+		temp = numpy.load(input_file)["arr_0"]
+		for row_index in range(len(temp)):
+			outputs_cache.append(temp[row_index, :])
+		print(i, j, len(outputs_cache))
+		i = j
+
+		if cutoff > 0 and cutoff <= len(outputs_cache):
+			return outputs_cache[:cutoff]
+
+	return outputs_cache
+
+
 def main():
 	import argparse
 	model_parser = argparse.ArgumentParser(description="model parser")
@@ -284,22 +315,29 @@ def main():
 	#
 	#
 
-	import porch.data
-	word_to_id, id_to_word = porch.data.import_vocabulary(os.path.join(settings.data_directory, "type.info"))
+	# import porch.data
+	# word_to_id, id_to_word = porch.data.import_vocabulary(os.path.join(settings.data_directory, "type.info"))
+	word_to_id, id_to_word = import_vocabulary(os.path.join(settings.data_directory, "type.info"))
 	data_sequence = numpy.load(os.path.join(settings.data_directory, "train.npy"))
+	# data_sequence =data_sequence[:20]
 
 	subset = settings.subset
 	if subset > 0:
 		data_sequence = data_sequence[:subset]
+	else:
+		data_sequence = data_sequence[:-1]
 
 	start_train = timeit.default_timer()
 
-	from . import ngram_sos, ngram_eos, nlm_eos
 	eos_word = nlm_eos
 	eos_id = word_to_id[eos_word]
 	number_of_candidates = settings.number_of_candidates
 	streaming_mode = settings.streaming
 	temperatures = settings.temperatures
+	output_directory = settings.output_directory
+	# breakdown_directory = os.path.join(output_directory, "breakdown")
+	# if not os.path.exists(breakdown_directory):
+	# os.mkdir(breakdown_directory)
 
 	#
 	#
@@ -307,23 +345,26 @@ def main():
 	#
 	#
 
-	from .ComputeNNLMOutputs import import_output_cache
+	# from .ComputeNNLMOutputs import import_output_cache
 	outputs_cache = import_output_cache(settings.probability_cache_directory, cutoff=len(data_sequence))
 	print("successfully load outputs cache...")
+	# print(outputs_cache)
+	# sys.exit()
 
-	log_p_word = renorm_unigrams(data_sequence, outputs_cache, id_to_word, temperatures)
-	assert len(log_p_word)==len(id_to_word)
-	assert numpy.all(log_p_word<0)
-	ngram_file = os.path.join(settings.output_directory, "ngram=1.txt")
+	log_p_word = renormalize_unigrams(data_sequence, outputs_cache, id_to_word, temperatures)
+	assert len(log_p_word) == len(id_to_word)
+	assert numpy.all(log_p_word <= 0)
+	ngram_file = os.path.join(output_directory, "ngram=1.txt")
 	ngram_stream = open(ngram_file, 'w')
 	ngram_stream.write("\\1-grams:\n")
 	ngram_stream.write("%g\t%s\n" % (-99, ngram_sos))
 	for word_id in id_to_word:
 		word = id_to_word[word_id] if word_id != eos_id else ngram_eos
-		#print(word_id, word)
-		#print(log_p_word[word_id], word)
+		# print(word_id, word)
+		# print(log_p_word[word_id], word)
 		ngram_stream.write("%g\t%s\n" % (log_p_word[word_id] / numpy.log(10), word))
-	#verify_ngrams(ngram_file)
+	ngram_stream.close()
+	# verify_ngrams(ngram_file)
 
 	for context_window_size in range(1, 9):
 		log_p_word_context, log_p_context = renormalize_ngrams(data_sequence=data_sequence,
@@ -336,7 +377,7 @@ def main():
 		                                                       number_of_candidates=number_of_candidates,
 		                                                       )
 
-		ngram_file = os.path.join(settings.output_directory, "ngram=%d.txt" % (context_window_size + 1))
+		ngram_file = os.path.join(output_directory, "ngram=%d.txt" % (context_window_size + 1))
 		ngram_stream = open(ngram_file, 'w')
 		ngram_stream.write("\\%d-grams:\n" % (context_window_size + 1))
 		for context_ids in log_p_word_context:
@@ -352,6 +393,7 @@ def main():
 				if log_prob > 0:
 					sys.stdout.write("warning: %g\t%s\n" % (log_prob, context + " " + word))
 				ngram_stream.write("%g\t%s\n" % (log_prob, context + " " + word))
+		ngram_stream.close()
 		verify_ngrams(ngram_file)
 
 	end_train = timeit.default_timer()
@@ -586,7 +628,7 @@ def backup_renormalize_ngrams(data_sequence, outputs_cache, context_window_size,
 			context_log_prob += numpy.log(outputs_cache[i - 1][data_sequence[i]])
 			if normalize_mode != streaming_mode and ((i - 1) in log_normalizers):
 				context_log_prob -= log_normalizers[i - 1]
-		assert context_log_prob < 0, (context_log_prob, context_window)
+		assert context_log_prob <= 0, (context_log_prob, context_window)
 
 		if (i + 1) % 100000 == 0:
 			print("processed %d %d-grams..." % (len(log_p_context), context_window_size + 1))

@@ -95,12 +95,12 @@ class GenericRNN(nn.Module):
 			print("Initialize hiddens to all zeros.")
 			hiddens = initialize_hidden_states(self, x.shape[1])
 
-		'''
+
 		for hidden in hiddens:
 			print("hidden", len(hidden))
 			for sub_hidden in hidden:
 				print("sub_hidden", sub_hidden.shape)
-		'''
+
 
 		recurrent_layer_index = 0
 		for layer in self.layers:
