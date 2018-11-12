@@ -209,7 +209,7 @@ def main():
 	# os.mkdir(os.path.join(output_directory, "sample"))
 	# os.mkdir(os.path.join(output_directory, "mean"))
 
-	from .ComputeNNLMOutputs import import_output_cache
+	from porch.helpers.rnn.CacheOutputs import import_output_cache
 	nlm_probability_cache = import_output_cache(nlm_cache_directory, settings.segment_size, cutoff=len(data_sequence))
 	# generate_context_word(ngram_file=ngram_file, word_to_id=word_to_id, context_file=context_file)
 

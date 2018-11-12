@@ -12,7 +12,6 @@ import torch
 import porch
 # import porch
 from porch.argument import param_deliminator, specs_deliminator
-from . import timestamp_prefix
 
 
 def get_hidden_states(network,
@@ -43,8 +42,8 @@ def get_hidden_states(network,
 			if directory is not None and ((i + 1) % segment == 0 or i == len(sequence) - 1):
 				# from .PlotHiddenProjectionTrajectory import reformat_hidden_states
 				hiddens_cache_reformatted = reformat_hidden_states(hiddens_cache)
-				hidden_cache_file = os.path.join(directory, "%s=%d-%d.pkl" % (
-					timestamp_prefix, processed, processed + segment - 1))
+				hidden_cache_file = os.path.join(directory, "timestamp=%d-%d.pkl" % (
+					processed, processed + segment - 1))
 
 				pickle.dump(hiddens_cache_reformatted, open(hidden_cache_file, "wb"), protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -86,6 +85,7 @@ def reformat_hidden_states(hidden_states):
 					hiddens_token_group_layer.numpy()
 	return hiddens_cache
 
+
 '''
 def unformat_hidden_states(hiddens_cache):
 	lstm_group_indices= set()
@@ -126,12 +126,13 @@ def unformat_hidden_states(hiddens_cache):
 	return hiddens_sequence
 '''
 
+
 def import_hidden_cache(hidden_cache_directory, segment_size=100000, cutoff=-1):
 	hidden_cache = None
 	i = 0
 	while (True):
 		j = i + segment_size
-		hidden_cache_file = os.path.join(hidden_cache_directory, "%s=%d-%d.pkl" % (timestamp_prefix, i, j - 1))
+		hidden_cache_file = os.path.join(hidden_cache_directory, "timestamp=%d-%d.pkl" % (i, j - 1))
 		if not os.path.exists(hidden_cache_file):
 			break
 
@@ -238,7 +239,7 @@ def add_options(model_parser):
 	# model_parser.add_argument("--context_window", dest="context_window", type=int, action='store', default=9,
 	# help="context window [9]")
 
-	#model_parser.add_argument("--segment_size", dest="segment_size", type=int, action='store', default=100000, help="segment size [100K]")
+	# model_parser.add_argument("--segment_size", dest="segment_size", type=int, action='store', default=100000, help="segment size [100K]")
 
 	model_parser.add_argument("--model_directory", dest="model_directory", action='store', default=None,
 	                          help="model directory [None, resume mode if specified]")
@@ -259,7 +260,7 @@ def validate_options(arguments):
 	if arguments.random_seed < 0:
 		arguments.random_seed = datetime.datetime.now().microsecond
 	# assert arguments.context_window > 0
-	#assert arguments.segment_size > 0
+	# assert arguments.segment_size > 0
 
 	assert os.path.exists(arguments.model_directory)
 	arguments.model = eval(arguments.model)

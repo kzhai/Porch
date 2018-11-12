@@ -7,7 +7,7 @@ import torch.utils.model_zoo as model_zoo
 import porch
 import porch.modules
 from porch import layer_deliminator
-from .parser import parse_to_int_sequence, parse_to_float_sequence, parse_activations, parse_pool_modes, \
+from porch.models import parse_to_int_sequence, parse_to_float_sequence, parse_activations, parse_pool_modes, \
 	parse_drop_modes
 
 logger = logging.getLogger(__name__)

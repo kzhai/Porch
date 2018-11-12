@@ -5,7 +5,7 @@ import torch.nn as nn
 
 import porch
 from porch.argument import layer_deliminator
-from porch.models import *
+from porch.models import parse_recurrent_layers
 
 # parse_feed_forward_layers, parse_recurrent_modes
 # parse_to_int_sequence, parse_to_float_sequence, parse_activations, parse_drop_modes,
@@ -95,12 +95,10 @@ class GenericRNN(nn.Module):
 			print("Initialize hiddens to all zeros.")
 			hiddens = initialize_hidden_states(self, x.shape[1])
 
-
 		for hidden in hiddens:
 			print("hidden", len(hidden))
 			for sub_hidden in hidden:
 				print("sub_hidden", sub_hidden.shape)
-
 
 		recurrent_layer_index = 0
 		for layer in self.layers:

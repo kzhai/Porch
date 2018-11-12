@@ -53,7 +53,7 @@ def main():
 	output_cache_directory = settings.output_cache_directory
 	hidden_cache_directory = settings.hidden_cache_directory
 
-	from .ComputeNNLMOutputs import import_output_cache
+	from porch.helpers.rnn.CacheOutputs import import_output_cache
 	outputs_cache = import_output_cache(output_cache_directory, cutoff=len(data_sequence))
 	print(len(outputs_cache), len(data_sequence))
 	assert len(outputs_cache) == len(data_sequence), (len(outputs_cache), len(data_sequence))
@@ -63,7 +63,7 @@ def main():
 
 	target_context_ids = [word_to_id[word] for word in "workers from".split()]
 	target_word_ids = [word_to_id[word] for word in "the <unk> out".split()]
-	from .ComputeNNLMOutputs import get_output_probability
+	from porch.helpers.rnn.CacheOutputs import get_output_probability
 	for index in range(10, len(data_sequence)):
 		sequence = [torch.tensor([[data_sequence[index]]], dtype=torch.int)]
 		for word_id in target_context_ids:
@@ -138,7 +138,6 @@ def validate_options(arguments):
 	# assert arguments.context_window > 0
 	# assert arguments.segment_size > 0
 
-	import porch
 	from porch import param_deliminator, specs_deliminator
 	assert os.path.exists(arguments.model_directory)
 	arguments.model = eval(arguments.model)

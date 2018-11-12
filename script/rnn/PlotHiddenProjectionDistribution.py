@@ -88,8 +88,8 @@ def scatter_plot_2D_histogram(X, output_file_path=None, title=None):
 
 def scatter_plot_3D(X, output_file_path=None, title=None):
 	import matplotlib.pyplot as plt
-	#from matplotlib.patches import FancyArrowPatch
-	#from mpl_toolkits.mplot3d import proj3d
+	# from matplotlib.patches import FancyArrowPatch
+	# from mpl_toolkits.mplot3d import proj3d
 
 	# fig, ax = plt.subplots(figsize=(50, 40))
 	fig = plt.figure(figsize=(25, 25))
@@ -130,8 +130,8 @@ def get_hidden_states_for_sequences(network,
 			kwargs["hiddens"] = hiddens
 			cache.append(hiddens_temp)
 
-			#if numpy.random.random()<0.01:
-				#break
+	# if numpy.random.random()<0.01:
+	# break
 
 	return cache
 
@@ -199,6 +199,35 @@ def indexify(phrase_file, word_to_id):
 	return phrase_to_sequence
 
 
+def import_hidden_cache(hidden_cache_directory, segment_size=100000, cutoff=-1):
+	hidden_cache = None
+	i = 0
+	while (True):
+		j = i + segment_size
+		hidden_cache_file = os.path.join(hidden_cache_directory, "timestamp=%d-%d.pkl" % (i, j - 1))
+		if not os.path.exists(hidden_cache_file):
+			break
+
+		# print(numpy.load(input_file))
+		temp = numpy.load(hidden_cache_file)
+
+		if hidden_cache is None:
+			hidden_cache = temp
+		else:
+			for key in temp:
+				hidden_cache[key] = numpy.vstack((hidden_cache[key], temp[key]))
+		# outputs_cache.append(temp[row_index, :])
+		print("checkpoint", i, j)
+		# print(outputs_cache)
+		# print([(key, output_cache.shape) for key, output_cache in outputs_cache])
+		i = j
+
+		if cutoff > 0 and cutoff <= i:
+			return hidden_cache
+
+	return hidden_cache
+
+
 def main():
 	import argparse
 	model_parser = argparse.ArgumentParser(description="model parser")
@@ -212,6 +241,7 @@ def main():
 		print("%s=%s" % (key, value))
 	print("========== ==========", "parameters", "========== ==========")
 
+	'''
 	import porch.data
 	dataset = porch.data.load_datasets(
 		input_directory=settings.data_directory,
@@ -223,19 +253,24 @@ def main():
 	# print(minibatch_x[:5, :])
 	minibatch_x = tokenize(minibatch_x)
 	# print(len(minibatch_x))
+	'''
 
-	# import porch.data
-	# word_to_id, id_to_word = porch.data.import_vocabulary(os.path.join(settings.data_directory, "type.info"))
+	data_directory = settings.data_directory
+	hidden_cache_directory = settings.hidden_cache_directory
+	output_directory = settings.output_directory
 
+
+
+	start_train = timeit.default_timer()
+
+	'''
 	model = settings.model(**settings.model_kwargs).to(settings.device)
 	model_file = os.path.join(settings.model_directory, "model.pth")
 	model.load_state_dict(torch.load(model_file))
 	print('Successfully load model state from {}'.format(model_file))
-
+	
 	torch.manual_seed(settings.random_seed)
-
-	start_train = timeit.default_timer()
-
+	
 	hiddens_sequence = {}
 	cache = get_hidden_states_for_sequences(network=model, sequences=minibatch_x)
 	temp_hiddens_sequence = reformat_hidden_states(cache)
@@ -249,11 +284,31 @@ def main():
 				numpy.vstack((hiddens_sequence[(lstm_group_index, lstm_layer_index)],
 				              temp_hiddens_sequence[(lstm_group_index, lstm_layer_index, batch_index)][
 				              settings.skip_steps:, :]))
+	'''
 
-	for lstm_group_index, lstm_layer_index in hiddens_sequence:
+	import porch.data
+	word_to_id, id_to_word = porch.data.import_vocabulary(os.path.join(data_directory, "type.info"))
+	#word_to_id, id_to_word = import_vocabulary(os.path.join(settings.data_directory, "type.info"))
+	data_sequence = numpy.load(os.path.join(data_directory, "train.npy"))
+	subset = settings.subset
+	if subset > 0:
+		data_sequence = data_sequence[:subset]
+	else:
+		data_sequence = data_sequence[:-1]
+
+	import porch.helpers.rnn
+	hiddens_cache = porch.helpers.rnn.import_hidden_cache(hidden_cache_directory, cutoff=len(data_sequence))
+	print("successfully load outputs cache...")
+	#
+	#
+	#
+	#
+	#
+
+	for lstm_group_index, lstm_layer_index in hiddens_cache:
 		print(lstm_group_index, lstm_layer_index)
 		# print(before_after_mapping[(layer_index, sub_layer_index, sequence_index)])
-		hiddens = hiddens_sequence[(lstm_group_index, lstm_layer_index)]
+		hiddens = hiddens_cache[(lstm_group_index, lstm_layer_index)]
 		# print(numpy.max((before - after), axis=1))
 		# print(numpy.min((before - after), axis=1))
 
@@ -269,7 +324,7 @@ def main():
 		# print(X.shape, Y.shape)
 		scatter_plot_2D_histogram(
 			hiddens_project,
-			output_file_path=os.path.join(settings.phrase_directory,
+			output_file_path=os.path.join(output_directory,
 			                              "projection=2D,lstm_group=%d,lstm_layer=%d,skip_steps=%d.png" % (
 				                              lstm_group_index, lstm_layer_index, settings.skip_steps))
 		)
@@ -280,7 +335,7 @@ def main():
 		# Y = before_after[(len(before_after) // 2):, :]
 		scatter_plot_3D(
 			hiddens_project,
-			output_file_path=os.path.join(settings.phrase_directory,
+			output_file_path=os.path.join(output_directory,
 			                              "projection=3D,lstm_group=%d,lstm_layer=%d,skip_steps=%d.png" % (
 				                              lstm_group_index, lstm_layer_index, settings.skip_steps))
 		)
@@ -294,10 +349,15 @@ def add_options(model_parser):
 	# generic argument set 1
 	model_parser.add_argument("--data_directory", dest="data_directory", action='store', default=None,
 	                          help="input directory [None]")
-	model_parser.add_argument("--phrase_directory", dest="phrase_directory", action='store', default=None,
-	                          help="phrase directory [None]")
-	model_parser.add_argument('--random_seed', type=int, default=-1, help='random seed (default: -1=time)')
+	model_parser.add_argument("--hidden_cache_directory", dest="hidden_cache_directory", action='store', default=None,
+	                          help="hidden cache directory [None]")
+	model_parser.add_argument("--output_directory", dest="output_directory", action='store', default=None,
+	                          help="output directory [None]")
 
+	model_parser.add_argument('--subset', dest="subset", action='store', type=int, default=0,
+	                          help='subset (default: 0=total)')
+
+	'''
 	# generic argument set 3
 	model_parser.add_argument("--number_of_samples", dest="number_of_samples", type=int, action='store', default=-1,
 	                          help="number of samples [-1]")
@@ -317,11 +377,14 @@ def add_options(model_parser):
 	                          help="neural network model [porch.mnist.MLP]")
 	model_parser.add_argument("--model_kwargs", dest="model_kwargs", action='store', default="",
 	                          help="model kwargs specified for neural network model [None]")
+	'''
 
+	'''
 	model_parser.add_argument("--data", dest='data', action='append', default=[],
 	                          help="data preprocess function [None] defined in porch.data")
 	model_parser.add_argument("--skip_steps", dest="skip_steps", type=int, action='store', default=0,
 	                          help="skip the first n steps for each minibatch [0] set to larger positive to warm start]")
+	'''
 
 	return model_parser
 
@@ -330,13 +393,14 @@ def validate_options(arguments):
 	from porch.argument import param_deliminator, specs_deliminator
 
 	# use_cuda = arguments.device.lower() == "cuda" and torch.cuda.is_available()
-	arguments.device = "cuda" if torch.cuda.is_available() else "cpu"
-	arguments.device = torch.device(arguments.device)
+	#arguments.device = "cuda" if torch.cuda.is_available() else "cpu"
+	#arguments.device = torch.device(arguments.device)
 
 	# generic argument set snapshots
-	if arguments.random_seed < 0:
-		arguments.random_seed = datetime.datetime.now().microsecond
+	#if arguments.random_seed < 0:
+		#arguments.random_seed = datetime.datetime.now().microsecond
 
+	'''
 	# generic argument set 5
 	data = collections.OrderedDict()
 	for data_function_params_mapping in arguments.data:
@@ -351,7 +415,9 @@ def validate_options(arguments):
 	arguments.data = data
 
 	assert arguments.skip_steps >= 0
+	'''
 
+	'''
 	# generic argument set 4
 	assert os.path.exists(arguments.model_directory)
 	arguments.model = eval(arguments.model)
@@ -364,10 +430,15 @@ def validate_options(arguments):
 		assert len(key_value_pair) == 2
 		model_kwargs[key_value_pair[0]] = key_value_pair[1]
 	arguments.model_kwargs = model_kwargs
+	'''
 
 	# generic argument set 1
 	assert os.path.exists(arguments.data_directory)
-	assert os.path.exists(arguments.phrase_directory)
+	assert os.path.exists(arguments.hidden_cache_directory)
+	assert arguments.subset>=0
+
+	if not os.path.exists(arguments.output_directory):
+		os.mkdir(arguments.output_directory)
 
 	return arguments
 

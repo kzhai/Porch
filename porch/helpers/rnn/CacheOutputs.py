@@ -11,7 +11,6 @@ import torch
 import porch
 # import porch
 from porch.argument import param_deliminator, specs_deliminator
-from . import cache_directory_name, output_directory_name, timestamp_prefix
 
 
 def get_output_probability(network,
@@ -34,24 +33,24 @@ def get_output_probability(network,
 		kwargs = {"hiddens": hiddens}
 		# hiddens_cache.append(hiddens_temp)
 		# for i, token in enumerate(sequence):
-		for i in range(0, len(sequence)-1, sequence_length):
+		for i in range(0, len(sequence) - 1, sequence_length):
 			j = min(i + sequence_length, len(sequence))
 			temp_sequence = torch.tensor([sequence[i:j]], dtype=torch.int)
-			#temp_sequence = torch.tensor([sequence[i:j]], dtype=torch.int).t()
-			#print(temp_sequence)
-			#assert (token.shape == (1, 1))
+			# temp_sequence = torch.tensor([sequence[i:j]], dtype=torch.int).t()
+			# print(temp_sequence)
+			# assert (token.shape == (1, 1))
 			output, hiddens = network(temp_sequence, **kwargs)
-			output= output.view(-1, vocabulary_size)
-			#hiddens_temp = porch.base.detach(hiddens)
+			output = output.view(-1, vocabulary_size)
+			# hiddens_temp = porch.base.detach(hiddens)
 			kwargs["hiddens"] = porch.base.detach(hiddens)
 			# hiddens_cache.append(hiddens_temp)
 
-			#distribution = torch.nn.functional.softmax(output, dim=1)
+			# distribution = torch.nn.functional.softmax(output, dim=1)
 			distributions = torch.nn.functional.log_softmax(output, dim=1)
 			# distribution = porch.base.detach(distribution)[0, :]
 			distributions = distributions.numpy()
-			#print(distributions.shape)
-			#distribution = distribution.numpy()[0, :]
+			# print(distributions.shape)
+			# distribution = distribution.numpy()[0, :]
 			if directory is None:
 				for j in range(len(distributions)):
 					outputs_cache.append(distributions[j, :])
@@ -76,7 +75,7 @@ def import_output_cache(probability_directory, segment_size=100000, cutoff=0):
 	i = 0
 	while (True):
 		j = i + segment_size
-		input_file = os.path.join(probability_directory, "%s=%d-%d.npz" % (timestamp_prefix, i, j - 1))
+		input_file = os.path.join(probability_directory, "timestamp=%d-%d.npz" % (i, j - 1))
 		if not os.path.exists(input_file):
 			break
 		temp = numpy.load(input_file)["arr_0"]
@@ -97,7 +96,7 @@ def export_output_cache(outputs_cache, probability_directory, segment_size=10000
 		j = i + segment_size
 		j = j if j < len(outputs_cache) else len(outputs_cache)
 
-		output_file = os.path.join(probability_directory, "%s=%d-%d.npz" % (timestamp_prefix, i, j - 1))
+		output_file = os.path.join(probability_directory, "timestamp=%d-%d.npz" % (i, j - 1))
 		numpy.savez_compressed(output_file, outputs_cache[i:j])
 		print(i, j)
 		i = j
@@ -128,7 +127,7 @@ def main():
 	import porch.data
 	word_to_id, id_to_word = porch.data.import_vocabulary(os.path.join(settings.data_directory, "type.info"))
 	data_sequence = numpy.load(os.path.join(settings.data_directory, "train.npy"))
-	#data_sequence = data_sequence[:20]
+	# data_sequence = data_sequence[:20]
 
 	model = settings.model(**settings.model_kwargs).to(settings.device)
 	model_file = os.path.join(settings.model_directory, "model.pth")
@@ -152,13 +151,14 @@ def main():
 	#
 
 	# probability_file = os.path.join(settings.model_directory, "data=train,probs=conditional.npz")
-	probability_directory = os.path.join(settings.model_directory, cache_directory_name)
-	#probability_directory = os.path.join(settings.model_directory, "test_cache")
+	probability_directory = os.path.join(settings.model_directory, "data=train,cache=log_softmax(output)")
+	# probability_directory = os.path.join(settings.model_directory, "test_cache")
 	if (not os.path.exists(probability_directory)):
 		print("recomputing output probabilities, this may take a while...")
 		os.mkdir(probability_directory)
-		outputs_cache = get_output_probability(network=model, sequence=data_sequence, vocabulary_size=len(id_to_word), sequence_length=sequence_length)
-		#print(outputs_cache)
+		outputs_cache = get_output_probability(network=model, sequence=data_sequence, vocabulary_size=len(id_to_word),
+		                                       sequence_length=sequence_length)
+		# print(outputs_cache)
 		export_output_cache(outputs_cache, probability_directory)
 
 	# outputs_cache = numpy.load(probability_file)["arr_0"]
@@ -195,7 +195,7 @@ def add_options(model_parser):
 	model_parser.add_argument("--sequence_length", dest="sequence_length", type=int, action='store', default=35,
 	                          help="sequence length [35]")
 
-	#model_parser.add_argument("--segment_size", dest="segment_size", type=int, action='store', default=100000, help="segment size [100K]")
+	# model_parser.add_argument("--segment_size", dest="segment_size", type=int, action='store', default=100000, help="segment size [100K]")
 
 	model_parser.add_argument("--model_directory", dest="model_directory", action='store', default=None,
 	                          help="model directory [None, resume mode if specified]")
@@ -216,7 +216,7 @@ def validate_options(arguments):
 	if arguments.random_seed < 0:
 		arguments.random_seed = datetime.datetime.now().microsecond
 	assert arguments.sequence_length > 0
-	#assert arguments.segment_size > 0
+	# assert arguments.segment_size > 0
 
 	assert os.path.exists(arguments.model_directory)
 	arguments.model = eval(arguments.model)

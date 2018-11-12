@@ -185,7 +185,7 @@ def scatter_plot_3D(X, tokens=None, output_file_path=None, title=None):
 
 def a(tokens, model, word_to_id, id_to_word, perturb_history=1, perturb_sample=9):
 	import porch
-	from .ComputeNNLMHiddens import reformat_hidden_states
+	from porch.helpers.rnn.CacheHiddens import reformat_hidden_states
 
 	hidden_sequence_mapping = {}
 
@@ -305,7 +305,7 @@ def main():
 		assert settings.model_directory is None
 		model = None
 
-		from .ComputeNNLMHiddens import import_hidden_cache
+		from porch.helpers.rnn.CacheHiddens import import_hidden_cache
 		data_sequence = numpy.load(os.path.join(data_directory, "train.npy"))
 		#data_sequence = data_sequence[:1000]
 		hiddens_cache = import_hidden_cache(settings.hidden_cache_directory, cutoff=len(data_sequence))
