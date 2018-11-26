@@ -1,6 +1,8 @@
 # import logging
 import os
 import timeit
+#import tracemalloc
+#import linecache
 
 import numpy
 import scipy
@@ -10,6 +12,50 @@ ngram_sos = "<s>"
 ngram_eos = "</s>"
 nlm_eos = "<eos>"
 
+
+class TrieNode():
+	def __init__(self):
+		self._word_to_logprob = {}
+		self._children = {}
+		# self._parent = None
+		self._log_E_n_ge1_context = None
+		self._log_E_c_context = None
+
+
+def find(node, context_ids):
+	for context_id in context_ids:
+		if context_id not in node._children:
+			return None
+		node = node._children[context_id]
+	return node
+
+
+'''
+def display_top(snapshot, key_type='lineno', limit=3):
+	snapshot = snapshot.filter_traces((
+		tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
+		tracemalloc.Filter(False, "<unknown>"),
+	))
+	top_stats = snapshot.statistics(key_type)
+
+	print("Top %s lines" % limit)
+	for index, stat in enumerate(top_stats[:limit], 1):
+		frame = stat.traceback[0]
+		# replace "/path/to/module/file.py" with "module/file.py"
+		filename = os.sep.join(frame.filename.split(os.sep)[-2:])
+		print("#%s: %s:%s: %.1f KiB"
+		      % (index, filename, frame.lineno, stat.size / 1024))
+		line = linecache.getline(frame.filename, frame.lineno).strip()
+		if line:
+			print('    %s' % line)
+
+	other = top_stats[limit:]
+	if other:
+		size = sum(stat.size for stat in other)
+		print("%s other: %.1f KiB" % (len(other), size / 1024))
+	total = sum(stat.size for stat in top_stats)
+	print("Total allocated size: %.1f KiB" % (total / 1024))
+'''
 
 def generate_candidates(data_sequence, context_window_size, eos_id, outputs_cache=None, number_of_candidates=0):
 	context_candidates = {}
@@ -84,6 +130,8 @@ streaming_mode = "none"
 
 def renormalize_unigrams(data_sequence, outputs_cache, id_to_word, temperatures, max_frequency=5,
                          reward_probability=0):
+	# root = TrieNode()
+
 	log_s_table = {}
 	count_word = {}
 	log_E_c_word = {}
@@ -127,11 +175,14 @@ def renormalize_unigrams(data_sequence, outputs_cache, id_to_word, temperatures,
 		E_log_n_gt0_word[word_id] = scipy.misc.logsumexp(log_s_table[word_id][1:])
 	'''
 
-	return log_E_c_word, count_word, log_s_table
+	# root._word_to_log_prob[word_id] = log_E_c_word[word_id]
+
+	return log_E_c_word, count_word, log_s_table  # ,
 
 
 def renormalize_ngrams(data_sequence, outputs_cache, context_window_size, id_to_word, eos_id,
                        temperatures,
+                       # root,
                        streaming_mode=streaming_mode,
                        number_of_candidates=0,
                        max_frequency=5,
@@ -520,6 +571,8 @@ def main():
 	# verify_ngrams(ngram_file)
 	'''
 
+	root = TrieNode()
+	log_discounts = {}
 	for context_window_size in range(0, 9):
 		renorm_time = timeit.default_timer()
 		if context_window_size == 0:
@@ -578,12 +631,34 @@ def main():
 		'''
 
 		post_renorm_time = timeit.default_timer()
+		#tracemalloc.start()
 
-		log_E_n_ge1_context = {}
+		if (context_window_size > 0) or backoff_to_uniform:
+			E_n_1 = 1e-99
+			E_n_2 = 1e-99
+			for context_ids in log_s_table_context_word:
+				for word_id in log_s_table_context_word[context_ids]:
+					E_n_1 += numpy.exp(log_s_table_context_word[context_ids][word_id][1])
+					E_n_2 += numpy.exp(log_s_table_context_word[context_ids][word_id][2])
+
+			log_discounts[context_window_size] = numpy.log(E_n_1) - numpy.log(E_n_1 + 2 * E_n_2)
+			# print(E_n_1, E_n_2)
+			print("%d-gram discount: %g" % (context_window_size + 1, numpy.exp(log_discounts[context_window_size])))
+
+		# log_E_n_ge1_context = {}
 		log_p_c_gt0_context_word = {}
 		log_p_c_eq0_context_word = {}
 		for context_ids in log_s_table_context_word:
-			log_E_n_ge1_context[context_ids] = -1e3
+			if context_window_size == 0:
+				current = root
+			else:
+				parent = find(root, context_ids[:-1])
+				assert (context_ids[-1] not in parent._children)
+				parent._children[context_ids[-1]] = TrieNode()
+				current = parent._children[context_ids[-1]]
+
+			# log_E_n_ge1_context[context_ids] = -1e3
+			log_E_n_ge1_context = -1e3
 			log_p_c_gt0_context_word[context_ids] = {}
 			log_p_c_eq0_context_word[context_ids] = {}
 			# for word_id in id_to_word:
@@ -605,66 +680,96 @@ def main():
 
 				log_p_c_eq0_context_word[context_ids][word_id] = log_s_table_context_word[context_ids][word_id][0]
 
+				'''
 				log_E_n_ge1_context[context_ids] = numpy.logaddexp(
 					log_E_n_ge1_context[context_ids],
 					log_p_c_gt0_context_word[context_ids][word_id]
 					# scipy.misc.logsumexp(log_s_table_context_word[context_ids][word_id][1:])
 				)
 				assert (not numpy.isnan(log_E_n_ge1_context[context_ids]))
+				'''
+
+				log_E_n_ge1_context = numpy.logaddexp(
+					log_E_n_ge1_context,
+					log_p_c_gt0_context_word[context_ids][word_id]
+					# scipy.misc.logsumexp(log_s_table_context_word[context_ids][word_id][1:])
+				)
+				assert (not numpy.isnan(log_E_n_ge1_context))
+
+			current._log_E_n_ge1_context = log_E_n_ge1_context
+			'''
+			print(context_ids, current._log_E_n_ge1_context)
+			if context_window_size > 1:
+				sys.exit()
+			'''
 
 		if context_window_size == 0 and (not backoff_to_uniform):
+			assert len(log_p_c_gt0_context_word) == 1
 			for context_ids in log_p_c_gt0_context_word:
+				current = find(root, context_ids)
+				# assert (len(temp_leftover) == 0)
 				for word_id in log_p_c_gt0_context_word[context_ids]:
-					log_p_c_gt0_context_word[context_ids][word_id] -= log_E_n_ge1_context[context_ids]
-			log_p_word_given_context = log_p_c_gt0_context_word
+					log_p_c_gt0_context_word[context_ids][word_id] -= current._log_E_n_ge1_context
+				# log_p_word_given_context = log_p_c_gt0_context_word
+				current._word_to_logprob = log_p_c_gt0_context_word[context_ids]
 		else:
-			E_n_1 = 1e-99
-			E_n_2 = 1e-99
+			# log_E_c_context = {}
 			for context_ids in log_s_table_context_word:
-				for word_id in log_s_table_context_word[context_ids]:
-					E_n_1 += numpy.exp(log_s_table_context_word[context_ids][word_id][1])
-					E_n_2 += numpy.exp(log_s_table_context_word[context_ids][word_id][2])
-			interpolation_discount = E_n_1 / (E_n_1 + 2 * E_n_2)
-			# print(E_n_1, E_n_2)
-			print("%d-gram interpolation discount: %g" % (context_window_size + 1, interpolation_discount))
+				current = find(root, context_ids)
 
-			log_E_c_context = {}
-			# log_E_c_context_word_tilda = {}#[context_ids][word_id]
-			for context_ids in log_s_table_context_word:
-				temp_context_ids = context_ids[1:]
-				log_E_c_context[context_ids] = -1e3
-				# log_E_c_context_word_tilda[context_ids] = {}
+				# log_E_c_context[context_ids] = -1e3
+				log_E_c_context = -1e3
 				# for word_id in log_E_c_context_word[context_ids]:
 				for word_id in id_to_word:
-					if context_window_size == 0 and backoff_to_uniform:
-						log_p_word_given_temp_context = -numpy.log(len(id_to_word))
-					else:
-						log_p_word_given_temp_context = log_p_word_given_context[temp_context_ids][word_id]
-					assert (not numpy.isnan(log_p_word_given_temp_context))
-
 					if word_id in log_s_table_context_word[context_ids]:
-						log_E_c_context_word[context_ids][word_id] = numpy.log(
+						if context_window_size == 0 and backoff_to_uniform:
+							log_p_word_given_temp_context = -numpy.log(len(id_to_word))
+						else:
+							temp_node = find(root, context_ids[1:])
+							log_p_word_given_temp_context = temp_node._word_to_logprob[word_id]
+						assert (not numpy.isnan(log_p_word_given_temp_context))
+
+						temp = numpy.log(
 							max(0, numpy.exp(log_E_c_context_word[context_ids][word_id])
-							    - interpolation_discount * numpy.exp(log_p_c_gt0_context_word[context_ids][word_id]))
-							+ interpolation_discount * numpy.exp(
-								log_E_n_ge1_context[context_ids] + log_p_word_given_temp_context)
-							#+ interpolation_discount * numpy.exp(
-								#log_p_c_eq0_context_word[context_ids][word_id] + log_p_word_given_temp_context)
+							    - numpy.exp(
+								log_discounts[context_window_size] + log_p_c_gt0_context_word[context_ids][word_id]))
+							+ numpy.exp(log_discounts[
+								            context_window_size] + current._log_E_n_ge1_context + log_p_word_given_temp_context)
+							# + interpolation_discount * numpy.exp(
+							# log_p_c_eq0_context_word[context_ids][word_id] + log_p_word_given_temp_context)
 						)
+						log_E_c_context_word[context_ids][word_id] = temp
 					else:
+						temp = log_discounts[context_window_size] + current._log_E_n_ge1_context
+						for i in range(0, len(context_ids)):
+							temp_node = find(root, context_ids[i + 1:])
+							if word_id in temp_node._word_to_logprob:
+								temp += temp_node._word_to_logprob[word_id]
+								break
+							temp += log_discounts[context_window_size - i - 1]
+							temp += temp_node._log_E_n_ge1_context - temp_node._log_E_c_context
+
+						'''
 						log_E_c_context_word[context_ids][word_id] = numpy.log(
-							+ interpolation_discount * numpy.exp(
-								log_E_n_ge1_context[context_ids] + log_p_word_given_temp_context)
-							#+ interpolation_discount * numpy.exp(log_p_word_given_temp_context)
+							+ discounts[context_window_size] * numpy.exp(
+								current._log_E_n_ge1 + log_p_word_given_temp_context)
+							# + interpolation_discount * numpy.exp(log_p_word_given_temp_context)
 						)
+						'''
 
-					log_E_c_context[context_ids] = numpy.logaddexp(
-						log_E_c_context[context_ids],
-						log_E_c_context_word[context_ids][word_id]
-					)
+					assert (not numpy.isnan(temp))
 
-					assert (not numpy.isnan(log_E_c_context_word[context_ids][word_id]))
-					assert (not numpy.isnan(log_E_c_context[context_ids]))
+					log_E_c_context = numpy.logaddexp(log_E_c_context, temp)
+					assert (not numpy.isnan(log_E_c_context))
+
+					'''
+					if context_ids == (24,):
+						# print(context_ids, " ".join([id_to_word[context_id] for context_id in context_ids]))
+						print(word_id, id_to_word[word_id], temp, log_E_c_context)
+					'''
+
+					# log_E_c_context[context_ids] = numpy.logaddexp(log_E_c_context[context_ids], temp)
+					# assert (not numpy.isnan(log_E_c_context[context_ids]))
 
 					'''
 					log_p_word_context[context_ids][word_id] = numpy.log(
@@ -681,10 +786,25 @@ def main():
 					)
 					'''
 
-			for context_ids in log_s_table_context_word:
-				for word_id in id_to_word:
-					log_E_c_context_word[context_ids][word_id] -= log_E_c_context[context_ids]
-			log_p_word_given_context = log_E_c_context_word
+				'''
+				print(context_ids, log_E_c_context)
+				if context_window_size > 1 or context_ids == (24,):
+					sys.exit()
+				'''
+
+				current._log_E_c_context = log_E_c_context
+
+				# for context_ids in log_s_table_context_word:
+				for word_id in log_s_table_context_word[context_ids]:
+					# log_E_c_context_word[context_ids][word_id] -= log_E_c_context[context_ids]
+					log_E_c_context_word[context_ids][word_id] -= current._log_E_c_context
+
+				current._word_to_logprob = log_E_c_context_word[context_ids]
+
+		# log_p_word_given_context = log_E_c_context_word
+
+		#snapshot = tracemalloc.take_snapshot()
+		#display_top(snapshot)
 
 		ngram_file = os.path.join(output_directory, "ngram=%d.txt" % (context_window_size + 1))
 		ngram_stream = open(ngram_file, 'w')
@@ -692,15 +812,21 @@ def main():
 		if context_window_size == 0:
 			ngram_stream.write("%g\t%s\n" % (-99, ngram_sos))
 
-		for context_ids in log_p_word_given_context:
+		for context_ids in log_s_table_context_word:
+			if len(context_ids) < context_window_size:
+				continue
 			context_words = [id_to_word[context_id] if context_id != eos_id else ngram_sos for context_id in
 			                 context_ids]
-			for word_id in id_to_word:
-				if word_id not in log_s_table_context_word[context_ids]:
-					continue
+			node = find(root, context_ids)
+			for word_id in log_s_table_context_word[context_ids]:
+				# if word_id not in log_s_table_context_word[context_ids]:
+				# continue
 				word = [id_to_word[word_id] if word_id != eos_id else ngram_eos]
-				ngram_stream.write("%g\t%s\n" % (
-					log_p_word_given_context[context_ids][word_id] / numpy.log(10), " ".join(context_words + word)))
+
+				# ngram_stream.write("%g\t%s\n" % (log_p_word_given_context[context_ids][word_id] / numpy.log(10), " ".join(context_words + word)))
+				ngram_stream.write("%g\t%s\n" % (node._word_to_logprob[word_id] / numpy.log(10),
+				                                 " ".join(context_words + word)))
+
 		ngram_stream.close()
 
 		post_renorm_time = timeit.default_timer() - post_renorm_time
