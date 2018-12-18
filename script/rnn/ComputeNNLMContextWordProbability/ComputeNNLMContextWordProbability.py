@@ -10,6 +10,10 @@ import sys
 import timeit
 import tracemalloc
 
+import queue
+
+import multiprocessing
+
 import numpy
 import scipy
 import scipy.misc
@@ -175,7 +179,7 @@ def generate_top_ranked_candidates(data_sequence, outputs_cache, context_window_
 # candidates_by_sample = "sample"
 # streaming_mode = "none"
 
-
+#@TODO: this code block is buggy, check the indices
 def unigram_to_trie(data_sequence, outputs_cache, root, id_to_word, temperatures, max_frequency=5,
                     reward_probability=0):
 	log_s_table = {}
@@ -188,8 +192,9 @@ def unigram_to_trie(data_sequence, outputs_cache, root, id_to_word, temperatures
 		log_E_counts[word_id] = -1e3
 
 	# count_word = numpy.zeros(len(id_to_word), dtype=numpy.int)
-	# log_p_word = {word_id: -1e3 for word_id in id_to_word}
+	#log_p_word = {word_id: -1e3 for word_id in id_to_word}
 	# log_E_c_word = numpy.zeros(len(id_to_word)) + -1e3
+	log_p_word = numpy.zeros(len(id_to_word)) + -1e3
 	for i in range(len(data_sequence)):
 		word_id = data_sequence[i]
 		counts[word_id] += 1
@@ -215,6 +220,8 @@ def unigram_to_trie(data_sequence, outputs_cache, root, id_to_word, temperatures
 		del temp_r
 		'''
 
+		log_p_word = numpy.logaddexp(log_p_word, outputs_cache[i] / temperatures[0] - log_normalizers - numpy.log(
+			len(data_sequence)))
 		# log_p_word[data_sequence[i]] = numpy.logaddexp(log_p_word[data_sequence[i]], outputs_cache[i][data_sequence[i]] / temperatures[0] - log_normalizers)
 		# word_count[data_sequence[i]] += 1
 		if (i + 1) % 100000 == 0:
@@ -227,21 +234,12 @@ def unigram_to_trie(data_sequence, outputs_cache, root, id_to_word, temperatures
 		# E_log_n_gt0_word[word_id] = max(numpy.log(1 - numpy.exp(log_s_table[word_id][0])), scipy.misc.logsumexp(log_s_table[word_id][1:]))
 		E_log_n_gt0_word[word_id] = scipy.misc.logsumexp(log_s_table[word_id][1:])
 	'''
-	# for word_id in id_to_word: #for word_id in log_s_table:
-	# print(word_id, log_s_table[word_id][1:])
-	# sys.exit()
-
-	'''
-	for temp_word_id in root._children:
-		child = root._children[temp_word_id]
-
-		root._log_p_word[temp_word_id] = child._log_p_c_gt0
-	'''
 
 	for temp_word_id in id_to_word:
 		child = TrieNode(max_frequency=max_frequency)
 		child._count = counts[temp_word_id]
 		child._log_E_c = log_E_counts[temp_word_id]
+		#child._log_E_c = log_p_word[temp_word_id]
 		child._log_s_table = log_s_table[temp_word_id]
 		root._children[temp_word_id] = child
 
@@ -252,17 +250,17 @@ def ngram_to_trie(data_sequence,
                   outputs_cache,
                   root,
                   temperatures,
+                  id_to_word,
                   number_of_candidates=0,
                   max_frequency=5,
                   min_ngram_order=1,
                   max_ngram_order=9,
                   eos_id=None,
                   ):
-	# root._children[data_sequence[0]] = TrieNode(count=0, E_log_count=-1e3, max_frequency=max_frequency)
-
 	context_buffer_ids = []
 	context_buffer_logprobs = []
 	word_candidates = set()
+	log_p_word = numpy.zeros(len(id_to_word)) + -1e3
 	for i in range(0, len(data_sequence)):
 		assert len(context_buffer_ids) < max_ngram_order
 
@@ -273,6 +271,7 @@ def ngram_to_trie(data_sequence,
 				word_candidates.add(temp_word_id)
 
 		log_normalizers = scipy.misc.logsumexp(outputs_cache[i - 1] / temperatures[max_ngram_order - 1])
+		log_p_word = numpy.logaddexp(log_p_word, outputs_cache[i-1] / temperatures[max_ngram_order-1] - log_normalizers )
 		# for j in range(len(context_buffer_ids)):
 		for j in range(len(context_buffer_ids) + 2 - min_ngram_order):
 			parent = find(root, context_buffer_ids[j:])
@@ -286,6 +285,9 @@ def ngram_to_trie(data_sequence,
 					max_ngram_order - 1] - log_normalizers
 				if j < len(context_buffer_ids):
 					sample_log_p_word_context += numpy.sum(context_buffer_logprobs[j:])
+				if sample_log_p_word_context > 0:
+					print(numpy.exp(sample_log_p_word_context), context_buffer_ids, context_buffer_logprobs)
+					sample_log_p_word_context = 0
 				assert 0 <= numpy.exp(sample_log_p_word_context) <= 1, numpy.exp(sample_log_p_word_context)
 
 				child = parent._children[temp_word_id]
@@ -317,7 +319,7 @@ def ngram_to_trie(data_sequence,
 			print("processed %d tokens..." % i)
 			sys.stdout.flush()
 
-	return root
+	return root, log_p_word
 
 
 def compute_E_n_x(current, ngram_order):
@@ -386,20 +388,25 @@ def connect_backoff_node(root):
 			nodes.append((child, context_ids + [temp_word_id]))
 
 
-def compute_log_p_word(root, log_discounts, id_to_word, backoff_to_uniform=False):
+def compute_log_p_word(root, log_discounts, id_to_word, log_p_word=None, backoff_to_uniform=False):
 	nodes = []
 
 	current_order = 0
 	renorm_time = timeit.default_timer()
 	number_of_ngrams = 0
+
+	#
+	#
+	#
+	#
+	#
 	log_sum_E_c_tilda = -1e3
 	for temp_word_id in root._children:
 		child = root._children[temp_word_id]
-		child._log_E_c_tilda = child._log_p_c_gt0
-
+		child._log_E_c_tilda = child._log_p_c_gt0 if (log_p_word is None) else log_p_word[temp_word_id]
 		log_sum_E_c_tilda = numpy.logaddexp(
 			log_sum_E_c_tilda,
-			child._log_p_c_gt0
+			child._log_E_c_tilda
 		)
 		assert (not numpy.isnan(log_sum_E_c_tilda))
 		nodes.append((child, [temp_word_id]))
@@ -409,6 +416,11 @@ def compute_log_p_word(root, log_discounts, id_to_word, backoff_to_uniform=False
 		child = root._children[temp_word_id]
 		root._log_p_word[temp_word_id] = child._log_E_c_tilda - root._log_sum_E_c_tilda
 		number_of_ngrams += 1
+	#
+	#
+	#
+	#
+	#
 
 	current_order += 1
 	renorm_time = timeit.default_timer() - renorm_time
@@ -428,7 +440,7 @@ def compute_log_p_word(root, log_discounts, id_to_word, backoff_to_uniform=False
 			renorm_time = timeit.default_timer()
 			number_of_ngrams = 0
 
-		compute_log_E_c_tilda(parent, context_ids, log_discounts, id_to_word, root, backoff_to_uniform)
+		compute_log_E_c_tilda(parent, context_ids, log_discounts, id_to_word, backoff_to_uniform)
 		# if len(parent._children)>0:
 		# print(context_ids, parent._log_sum_E_c_tilda)
 
@@ -439,8 +451,7 @@ def compute_log_p_word(root, log_discounts, id_to_word, backoff_to_uniform=False
 
 			nodes.append((child, context_ids + [temp_word_id]))
 
-
-def compute_log_E_c_tilda(parent, context_ids, log_discounts, id_to_word, root, backoff_to_uniform=False):
+def compute_log_E_c_tilda(parent, context_ids, log_discounts, id_to_word, backoff_to_uniform=False):
 	if len(parent._children) == 0:
 		return
 
@@ -459,10 +470,6 @@ def compute_log_E_c_tilda(parent, context_ids, log_discounts, id_to_word, root, 
 				temp_node = parent._backoff_node
 				log_p_word_given_temp_context = temp_node._log_p_word[temp_word_id]
 			assert (not numpy.isnan(log_p_word_given_temp_context))
-
-			# print(context_ids, temp_word_id, child._log_E_c, log_discounts[context_window_size], child._log_p_c_gt0,
-			# parent._log_sum_E_n_ge1, log_p_word_given_temp_context)
-			# sys.stdout.flush()
 
 			temp = numpy.log(
 				max(0, numpy.exp(child._log_E_c) -
@@ -508,7 +515,227 @@ def compute_log_E_c_tilda(parent, context_ids, log_discounts, id_to_word, root, 
 	parent._log_sum_E_c_tilda = log_sum_E_c_tilda
 
 
-# print(context_ids, parent._log_sum_E_c_tilda)
+def compute_log_p_word_multiprocessing(root, log_discounts, id_to_word, number_of_processes=2, backoff_to_uniform=False):
+	queue_of_nodes = multiprocessing.Queue()
+	#nodes_of_current_level = []
+	#nodes_of_next_level = []
+
+	context_node_mapping = {}
+
+	current_order = 0
+	renorm_time = timeit.default_timer()
+	number_of_ngrams = 0
+	log_sum_E_c_tilda = -1e3
+	for temp_word_id in root._children:
+		child = root._children[temp_word_id]
+		child._log_E_c_tilda = child._log_p_c_gt0
+
+		log_sum_E_c_tilda = numpy.logaddexp(
+			log_sum_E_c_tilda,
+			child._log_p_c_gt0
+		)
+		assert (not numpy.isnan(log_sum_E_c_tilda))
+		context_node_mapping[(temp_word_id,)] = child
+		queue_of_nodes.put((temp_word_id,))
+		#nodes_of_current_level.put((child, [temp_word_id]))
+		#nodes_of_current_level.append((child, [temp_word_id]))
+	root._log_sum_E_c_tilda = log_sum_E_c_tilda
+
+	for temp_word_id in root._children:
+		child = root._children[temp_word_id]
+		root._log_p_word[temp_word_id] = child._log_E_c_tilda - root._log_sum_E_c_tilda
+		number_of_ngrams += 1
+
+	current_order += 1
+	renorm_time = timeit.default_timer() - renorm_time
+	print("renorm %d %d-gram took %.2fs..." % (number_of_ngrams, current_order, renorm_time))
+	sys.stdout.flush()
+	renorm_time = timeit.default_timer()
+	# print("checkpoint", root._log_p_word[0])
+
+	# while (len(nodes_of_current_level)>0):
+	while (not queue_of_nodes.empty()):
+		#
+		#
+		#
+
+		processes = []
+
+		# creating processes
+		for w in range(number_of_processes):
+			p = multiprocessing.Process(target=compute_log_E_c_tilda_multiprocessing,
+			                            args=(queue_of_nodes,
+			                                  #nodes_of_next_level,
+			                                  context_node_mapping, id_to_word, log_discounts, backoff_to_uniform))
+			processes.append(p)
+		print("creating %d processes to renormalize %d-gram..." % (number_of_processes, current_order+1))
+
+		for p in processes:
+			p.start()
+
+		for p in processes:
+			p.join()
+
+		renorm_time = timeit.default_timer() - renorm_time
+		print("renorm %d %d-gram took %.2fs..." % (len(context_node_mapping), current_order, renorm_time))
+		sys.stdout.flush()
+		renorm_time = timeit.default_timer()
+
+		current_order += 1
+		temp_context_node_mapping = {}
+		for context_ids in context_node_mapping:
+			parent = context_node_mapping[context_ids]
+			for temp_word_id in parent._children:
+				child = parent._children[temp_word_id]
+				#parent._log_p_word[temp_word_id] = child._log_E_c_tilda - parent._log_sum_E_c_tilda
+				temp_context_node_mapping[context_ids + (temp_word_id,)] = child
+				queue_of_nodes.put(context_ids + (temp_word_id,))
+				#nodes_of_next_level.put((child, context_ids + [temp_word_id]))
+				#nodes_of_next_level.append((child, context_ids + [temp_word_id]))
+		context_node_mapping = temp_context_node_mapping
+		print("checkpoint2", queue_of_nodes.qsize(), len(context_node_mapping))
+		for x in context_node_mapping:
+			print(x)
+
+		'''
+		parent, context_ids = nodes_of_current_level.pop(0)
+		if len(context_ids) > current_order:
+			current_order += 1
+			renorm_time = timeit.default_timer() - renorm_time
+			print("renorm %d %d-gram took %.2fs..." % (number_of_ngrams, current_order, renorm_time))
+			sys.stdout.flush()
+			renorm_time = timeit.default_timer()
+			number_of_ngrams = 0
+
+		compute_log_E_c_tilda(parent, context_ids, log_discounts, id_to_word, backoff_to_uniform)
+		# if len(parent._children)>0:
+		# print(context_ids, parent._log_sum_E_c_tilda)
+		'''
+
+def compute_log_E_c_tilda_multiprocessing(nodes_of_current_level,
+                                          #nodes_of_next_level,
+                                          context_node_mapping, id_to_word, log_discounts, backoff_to_uniform=False):
+	while True:
+		try:
+			'''
+				try to get task from the queue. get_nowait() function will 
+				raise queue.Empty exception if the queue is empty. 
+				queue(False) function would do the same task also.
+			'''
+			#task = tasks_to_accomplish.get_nowait()
+			#parent, context_ids = nodes_of_current_level.pop(0)
+			#parent, context_ids = nodes_of_current_level.get_nowait()
+			context_ids = nodes_of_current_level.get(False)
+		except queue.Empty:
+			break
+		except IndexError:
+			break
+		else:
+			'''
+				if no exception has been raised, add the task completion 
+				message to task_that_are_done queue
+			'''
+
+			#print(context_ids)
+			print(str(context_ids )+ ' is done by ' + multiprocessing.current_process().name)
+			#print(task)
+			#tasks_that_are_done.put(task + ' is done by ' + current_process().name)
+			#time.sleep(numpy.random.random())
+
+			#
+			#
+			#
+			#
+			#
+
+			parent = context_node_mapping[context_ids]
+			#(parent, context_ids, log_discounts, id_to_word, backoff_to_uniform=False):
+			if len(parent._children) == 0:
+				continue
+
+			log_sum_E_c_tilda = -1e3
+			context_window_size = len(context_ids)
+			# for word_id in log_E_c_context_word[context_ids]:
+			for temp_word_id in id_to_word:
+				if temp_word_id in parent._children:
+					child = parent._children[temp_word_id]
+					# log_s_table_context_word[context_ids]:
+
+					if context_window_size == 0 and backoff_to_uniform:
+						log_p_word_given_temp_context = -numpy.log(len(id_to_word))
+					else:
+						# temp_node = find(root, context_ids[1:])
+						temp_node = parent._backoff_node
+						log_p_word_given_temp_context = temp_node._log_p_word[temp_word_id]
+					assert (not numpy.isnan(log_p_word_given_temp_context))
+
+					# print(context_ids, temp_word_id, child._log_E_c, log_discounts[context_window_size], child._log_p_c_gt0,
+					# parent._log_sum_E_n_ge1, log_p_word_given_temp_context)
+					# sys.stdout.flush()
+
+					temp = numpy.log(
+						max(0, numpy.exp(child._log_E_c) -
+						    numpy.exp(log_discounts[context_window_size] + child._log_p_c_gt0))
+						+ numpy.exp(
+							log_discounts[context_window_size] + parent._log_sum_E_n_ge1 + log_p_word_given_temp_context)
+						# + interpolation_discount * numpy.exp(
+						# log_p_c_eq0_context_word[context_ids][word_id] + log_p_word_given_temp_context)
+					)
+					child._log_E_c_tilda = temp
+				else:
+					temp = log_discounts[context_window_size] + parent._log_sum_E_n_ge1
+					temp_node = parent
+					for j in range(len(context_ids)):
+						# temp_node = find(root, context_ids[j + 1:])
+						temp_node = temp_node._backoff_node
+
+						'''
+						if context_ids == [3, 4]:
+							if temp_word_id in temp_node._log_p_word:
+								print("found", temp_word_id, temp, context_ids[j + 1:], temp_node._log_p_word[temp_word_id])
+							else:
+								print("not found", temp_word_id, temp, context_ids[j + 1:],
+								      log_discounts[context_window_size - j - 1],
+								      temp_node._log_sum_E_n_ge1, temp_node._log_sum_E_c_tilda)
+						'''
+						if temp_word_id in temp_node._log_p_word:
+							temp += temp_node._log_p_word[temp_word_id]
+							break
+						if context_window_size - j - 1 not in log_discounts:
+							break
+						temp += log_discounts[context_window_size - j - 1]
+						temp += temp_node._log_sum_E_n_ge1 - temp_node._log_sum_E_c_tilda
+
+				assert (not numpy.isnan(temp))
+
+				# if context_ids == [3, 4]:
+				# print(temp_word_id, (temp_word_id in parent._children), log_sum_E_c_tilda, temp)
+
+				log_sum_E_c_tilda = numpy.logaddexp(log_sum_E_c_tilda, temp)
+				assert (not numpy.isnan(log_sum_E_c_tilda))
+
+			parent._log_sum_E_c_tilda = log_sum_E_c_tilda
+
+			#
+			#
+			#
+			#
+			#
+			#'''
+			for temp_word_id in parent._children:
+				child = parent._children[temp_word_id]
+				parent._log_p_word[temp_word_id] = child._log_E_c_tilda - parent._log_sum_E_c_tilda
+				#context_node_mapping[context_ids + (temp_word_id,)] = child
+				#nodes_of_next_level.put(context_ids + (temp_word_id,), False)
+				#print(nodes_of_next_level.qsize())
+				#nodes_of_next_level.put((child, context_ids + [temp_word_id]))
+				#nodes_of_next_level.append((child, context_ids + [temp_word_id]))
+			#'''
+
+	#nodes_of_current_level.close()
+	#print("checkpoint1", nodes_of_next_level.qsize())
+	return True
+
 
 
 def output_ngrams(root, id_to_word, eos_id, output_directory):
@@ -615,17 +842,17 @@ def main():
 	eos_word = nlm_eos
 	eos_id = word_to_id[eos_word]
 	number_of_candidates = settings.number_of_candidates
-	#streaming_mode = settings.stream
+	# streaming_mode = settings.stream
 	temperatures = settings.temperatures
 	output_directory = settings.output_directory
 	max_frequency = settings.max_frequency
 	max_ngram_order = settings.max_ngram_order
-	#backoff_to_uniform = settings.backoff_to_uniform
+	# backoff_to_uniform = settings.backoff_to_uniform
 	# interpolating_mode = settings.interpolate
 	# smoothing_mode = settings.smooth
 	# interpolation_discount = settings.interpolation_discount
 	# non_uniform_mode = settings.non_uniform
-	#reward_probability = settings.reward_probability
+	# reward_probability = settings.reward_probability
 	memory_footprint = settings.memory_footprint
 	# breakdown_directory = os.path.join(output_directory, "breakdown")
 	# if not os.path.exists(breakdown_directory):
@@ -674,16 +901,24 @@ def main():
 	'''
 
 	ngram_to_trie_time = timeit.default_timer()
-	root = ngram_to_trie(data_sequence=data_sequence,
-	                     outputs_cache=outputs_cache,
-	                     root=root,
-	                     eos_id=eos_id,
-	                     temperatures=temperatures,
-	                     number_of_candidates=number_of_candidates,
-	                     max_frequency=max_frequency,
-	                     min_ngram_order=1,
-	                     max_ngram_order=max_ngram_order,
-	                     )
+	'''
+	root = unigram_to_trie(data_sequence=data_sequence,
+	                       outputs_cache=outputs_cache,
+	                       root=root,
+	                       id_to_word=id_to_word,
+	                       temperatures=temperatures)
+	'''
+	root, log_p_word = ngram_to_trie(data_sequence=data_sequence,
+	                                 outputs_cache=outputs_cache,
+	                                 root=root,
+	                                 eos_id=eos_id,
+	                                 temperatures=temperatures,
+	                                 id_to_word=id_to_word,
+	                                 number_of_candidates=number_of_candidates,
+	                                 max_frequency=max_frequency,
+	                                 min_ngram_order=1,
+	                                 max_ngram_order=max_ngram_order,
+	                                 )
 	ngram_to_trie_time = timeit.default_timer() - ngram_to_trie_time
 	print("ngram to trie took %.2fs..." % (ngram_to_trie_time))
 	sys.stdout.flush()
@@ -763,13 +998,37 @@ def main():
 	#
 	#
 	compute_log_p_word_time = timeit.default_timer()
-	compute_log_p_word(root=root, log_discounts=log_discounts, id_to_word=id_to_word)
+	compute_log_p_word(root=root,
+	                   log_discounts=log_discounts,
+	                   id_to_word=id_to_word,
+	                   log_p_word=log_p_word
+	                   )
+	'''
+	compute_log_p_word_multiprocessing(root=root,
+	                                   log_discounts=log_discounts,
+	                                   id_to_word=id_to_word,
+	                                   number_of_processes=4
+	                                   )
+	'''
+
 	compute_log_p_word_time = timeit.default_timer() - compute_log_p_word_time
 	print("compute log_p_word took %.2fs..." % (compute_log_p_word_time))
 	sys.stdout.flush()
 	if memory_footprint:
 		snapshot = tracemalloc.take_snapshot()
 		display_top(snapshot)
+	#
+	#
+	#
+
+	#
+	#
+	#
+	#dfs(root=root,context_ids=[],display_type=4)
+	#
+	#
+	#
+
 	#
 	#
 	#
@@ -812,10 +1071,10 @@ def add_options(model_parser):
 	model_parser.add_argument('--max_ngram_order', dest="max_ngram_order", action='store', type=int, default=5,
 	                          help='max ngram order (default: 5)')
 
-	#model_parser.add_argument('--stream', dest="stream", action='store', default="False",
-	                          #help='streaming mode (default: False)')
-	#model_parser.add_argument('--backoff_to_uniform', dest="backoff_to_uniform", action='store', default="False",
-	                          #help='backoff to uniform mode (default: False)')
+	# model_parser.add_argument('--stream', dest="stream", action='store', default="False",
+	# help='streaming mode (default: False)')
+	# model_parser.add_argument('--backoff_to_uniform', dest="backoff_to_uniform", action='store', default="False",
+	# help='backoff to uniform mode (default: False)')
 
 	model_parser.add_argument('--memory_footprint', dest="memory_footprint", action='store', default="False",
 	                          help='trace memory allocation and footprint (default: False)')
@@ -898,7 +1157,7 @@ def validate_options(arguments):
 	assert arguments.interpolation_discount >= 0
 	'''
 
-	#assert arguments.reward_probability >= 0
+	# assert arguments.reward_probability >= 0
 
 	'''
 	assert os.path.exists(arguments.model_directory)
