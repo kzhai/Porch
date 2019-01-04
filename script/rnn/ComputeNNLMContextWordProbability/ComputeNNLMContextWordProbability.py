@@ -9,6 +9,7 @@ import multiprocessing
 import os
 import queue
 import sys
+import time
 import timeit
 import tracemalloc
 
@@ -314,6 +315,218 @@ def connect_backoff_node(root):
 		for temp_word_id in current._children:
 			child = current._children[temp_word_id]
 			nodes.append((child, context_ids + [temp_word_id]))
+
+
+def compute_log_p_word_multiprocessing(root, log_discounts, id_to_word, log_sum_p_word=None, number_of_processes=2,
+                                       backoff_to_uniform=False):
+	context_ids_queue = multiprocessing.Queue()
+	log_E_c_tilda_queue = multiprocessing.Queue()
+	log_sum_E_c_tilda_queue = multiprocessing.Queue()
+	context_ids_to_trie_node = {}
+
+	current_order = 0
+	renorm_time = timeit.default_timer()
+	number_of_ngrams = 0
+
+	#
+	#
+	#
+	log_sum_E_c_tilda = -1e3
+	for temp_word_id in root._children:
+		child = root._children[temp_word_id]
+		child._log_E_c_tilda = child._log_p_c_gt0 if (log_sum_p_word is None) else log_sum_p_word[temp_word_id]
+		log_sum_E_c_tilda = numpy.logaddexp(
+			log_sum_E_c_tilda,
+			child._log_E_c_tilda
+		)
+		assert (not numpy.isnan(log_sum_E_c_tilda))
+
+		context_ids_to_trie_node[(temp_word_id,)] = child
+		context_ids_queue.put((temp_word_id,))
+
+	root._log_sum_E_c_tilda = log_sum_E_c_tilda if (log_sum_p_word is None) else scipy.misc.logsumexp(
+		log_sum_p_word)
+
+	for temp_word_id in root._children:
+		child = root._children[temp_word_id]
+		root._log_p_word[temp_word_id] = child._log_E_c_tilda - root._log_sum_E_c_tilda
+		number_of_ngrams += 1
+	#
+	#
+	#
+
+	current_order += 1
+	renorm_time = timeit.default_timer() - renorm_time
+	print("renorm %d %d-gram took %.2fs..." % (number_of_ngrams, current_order, renorm_time))
+	sys.stdout.flush()
+	renorm_time = timeit.default_timer()
+
+	# while (len(nodes_of_current_level)>0):
+	while (not context_ids_queue.empty()):
+		#
+		#
+		#
+		processes = []
+
+		# creating processes
+		for w in range(number_of_processes):
+			p = multiprocessing.Process(target=compute_log_E_c_tilda_multiprocessing,
+			                            args=(context_ids_queue,
+			                                  log_E_c_tilda_queue,
+			                                  log_sum_E_c_tilda_queue,
+			                                  context_ids_to_trie_node, id_to_word, log_discounts, backoff_to_uniform))
+			processes.append(p)
+		print("creating %d processes to renormalize %d-gram..." % (number_of_processes, current_order + 1))
+
+		for p in processes:
+			p.start()
+
+		for p in processes:
+			p.join()
+
+		renorm_time = timeit.default_timer() - renorm_time
+		print("renorm %d %d-gram took %.2fs..." % (len(context_ids_to_trie_node), current_order, renorm_time))
+		sys.stdout.flush()
+		renorm_time = timeit.default_timer()
+
+		print(log_E_c_tilda_queue.qsize())
+		print(log_sum_E_c_tilda_queue.qsize())
+
+		while not log_E_c_tilda_queue.empty():
+			context_ids, word_id, log_E_c_tilda = log_E_c_tilda_queue.get()
+			context_ids_to_trie_node[context_ids][word_id]._log_E_c_tilda = log_E_c_tilda
+
+		while not log_sum_E_c_tilda_queue.empty():
+			context_ids, log_sum_E_c_tilda = log_sum_E_c_tilda_queue.get()
+			context_ids_to_trie_node[context_ids]._log_sum_E_c_tilda = log_sum_E_c_tilda
+
+		current_order += 1
+		temp_context_ids_to_trie_node = {}
+		for context_ids in context_ids_to_trie_node:
+			parent = context_ids_to_trie_node[context_ids]
+			for temp_word_id in parent._children:
+				child = parent._children[temp_word_id]
+				parent._log_p_word[temp_word_id] = child._log_E_c_tilda - parent._log_sum_E_c_tilda
+				temp_context_ids_to_trie_node[context_ids + (temp_word_id,)] = child
+				context_ids_queue.put(context_ids + (temp_word_id,))
+		context_ids_to_trie_node = temp_context_ids_to_trie_node
+
+
+def compute_log_E_c_tilda_multiprocessing(context_ids_queue,
+                                          log_E_c_tilda_queue,
+                                          log_sum_E_c_tilda_queue,
+                                          context_node_mapping, id_to_word, log_discounts, backoff_to_uniform=False):
+	while True:
+		try:
+			'''
+				try to get task from the queue. get_nowait() function will 
+				raise queue.Empty exception if the queue is empty. 
+				queue(False) function would do the same task also.
+			'''
+			# task = tasks_to_accomplish.get_nowait()
+			# parent, context_ids = nodes_of_current_level.pop(0)
+			# parent, context_ids = nodes_of_current_level.get_nowait()
+			context_ids = context_ids_queue.get(False)
+		except queue.Empty:
+			print("empty queue")
+			break
+		except IndexError:
+			break
+		else:
+			'''
+				if no exception has been raised, add the task completion 
+				message to task_that_are_done queue
+			'''
+			print(str(context_ids) + ' is done by ' + multiprocessing.current_process().name)
+			# tasks_that_are_done.put(task + ' is done by ' + current_process().name)
+			# time.sleep(numpy.random.random())
+
+			#
+			#
+			#
+			#
+			#
+
+			parent = context_node_mapping[context_ids]
+			# (parent, context_ids, log_discounts, id_to_word, backoff_to_uniform=False):
+			if len(parent._children) == 0:
+				continue
+
+			log_sum_E_c_tilda = -1e3
+			context_window_size = len(context_ids)
+			# for word_id in log_E_c_context_word[context_ids]:
+			for temp_word_id in id_to_word:
+				if temp_word_id in parent._children:
+					child = parent._children[temp_word_id]
+					# log_s_table_context_word[context_ids]:
+
+					if context_window_size == 0 and backoff_to_uniform:
+						log_p_word_given_temp_context = -numpy.log(len(id_to_word))
+					else:
+						# temp_node = find(root, context_ids[1:])
+						temp_node = parent._backoff_node
+						log_p_word_given_temp_context = temp_node._log_p_word[temp_word_id]
+					assert (not numpy.isnan(log_p_word_given_temp_context))
+
+					# print(context_ids, temp_word_id, child._log_E_c, log_discounts[context_window_size], child._log_p_c_gt0,
+					# parent._log_sum_E_n_ge1, log_p_word_given_temp_context)
+					# sys.stdout.flush()
+
+					temp = numpy.log(
+						max(0, numpy.exp(child._log_E_c) -
+						    numpy.exp(log_discounts[context_window_size] + child._log_p_c_gt0))
+						+ numpy.exp(
+							log_discounts[
+								context_window_size] + parent._log_sum_E_n_ge1 + log_p_word_given_temp_context)
+						# + interpolation_discount * numpy.exp(
+						# log_p_c_eq0_context_word[context_ids][word_id] + log_p_word_given_temp_context)
+					)
+					# child._log_E_c_tilda = temp
+					log_E_c_tilda_queue.put((context_ids, temp_word_id, temp), False)
+				else:
+					temp = log_discounts[context_window_size] + parent._log_sum_E_n_ge1
+					temp_node = parent
+					for j in range(len(context_ids)):
+						# temp_node = find(root, context_ids[j + 1:])
+						temp_node = temp_node._backoff_node
+
+						'''
+						if context_ids == [3, 4]:
+							if temp_word_id in temp_node._log_p_word:
+								print("found", temp_word_id, temp, context_ids[j + 1:], temp_node._log_p_word[temp_word_id])
+							else:
+								print("not found", temp_word_id, temp, context_ids[j + 1:],
+								      log_discounts[context_window_size - j - 1],
+								      temp_node._log_sum_E_n_ge1, temp_node._log_sum_E_c_tilda)
+						'''
+						if temp_word_id in temp_node._log_p_word:
+							temp += temp_node._log_p_word[temp_word_id]
+							break
+						if context_window_size - j - 1 not in log_discounts:
+							break
+						temp += log_discounts[context_window_size - j - 1]
+						temp += temp_node._log_sum_E_n_ge1 - temp_node._log_sum_E_c_tilda
+
+				assert (not numpy.isnan(temp))
+
+				# if context_ids == [3, 4]:
+				# print(temp_word_id, (temp_word_id in parent._children), log_sum_E_c_tilda, temp)
+
+				log_sum_E_c_tilda = numpy.logaddexp(log_sum_E_c_tilda, temp)
+				assert (not numpy.isnan(log_sum_E_c_tilda))
+
+			# parent._log_sum_E_c_tilda = log_sum_E_c_tilda
+			log_sum_E_c_tilda_queue.put((context_ids, log_sum_E_c_tilda), False)
+			print("put", context_ids)
+			time.sleep(.5)
+
+			'''
+			for temp_word_id in parent._children:
+				child = parent._children[temp_word_id]
+				parent._log_p_word[temp_word_id] = child._log_E_c_tilda - parent._log_sum_E_c_tilda
+			'''
+
+	return True
 
 
 def compute_log_p_word(root, log_discounts, id_to_word, log_sum_p_word=None, backoff_to_uniform=False):
@@ -654,6 +867,7 @@ def main():
 	#
 	#
 	compute_log_p_word_time = timeit.default_timer()
+
 	compute_log_p_word(root=root,
 	                   log_discounts=log_discounts,
 	                   id_to_word=id_to_word,
@@ -663,6 +877,7 @@ def main():
 	compute_log_p_word_multiprocessing(root=root,
 	                                   log_discounts=log_discounts,
 	                                   id_to_word=id_to_word,
+	                                   log_sum_p_word=(None if discount_unigram else log_sum_p_word),
 	                                   number_of_processes=4
 	                                   )
 	'''
@@ -829,228 +1044,3 @@ def validate_options(arguments):
 
 if __name__ == '__main__':
 	main()
-
-
-def compute_log_p_word_multiprocessing(root, log_discounts, id_to_word, number_of_processes=2,
-                                       backoff_to_uniform=False):
-	queue_of_nodes = multiprocessing.Queue()
-	# nodes_of_current_level = []
-	# nodes_of_next_level = []
-
-	context_node_mapping = {}
-
-	current_order = 0
-	renorm_time = timeit.default_timer()
-	number_of_ngrams = 0
-	log_sum_E_c_tilda = -1e3
-	for temp_word_id in root._children:
-		child = root._children[temp_word_id]
-		child._log_E_c_tilda = child._log_p_c_gt0
-
-		log_sum_E_c_tilda = numpy.logaddexp(
-			log_sum_E_c_tilda,
-			child._log_p_c_gt0
-		)
-		assert (not numpy.isnan(log_sum_E_c_tilda))
-		context_node_mapping[(temp_word_id,)] = child
-		queue_of_nodes.put((temp_word_id,))
-	# nodes_of_current_level.put((child, [temp_word_id]))
-	# nodes_of_current_level.append((child, [temp_word_id]))
-	root._log_sum_E_c_tilda = log_sum_E_c_tilda
-
-	for temp_word_id in root._children:
-		child = root._children[temp_word_id]
-		root._log_p_word[temp_word_id] = child._log_E_c_tilda - root._log_sum_E_c_tilda
-		number_of_ngrams += 1
-
-	current_order += 1
-	renorm_time = timeit.default_timer() - renorm_time
-	print("renorm %d %d-gram took %.2fs..." % (number_of_ngrams, current_order, renorm_time))
-	sys.stdout.flush()
-	renorm_time = timeit.default_timer()
-	# print("checkpoint", root._log_p_word[0])
-
-	# while (len(nodes_of_current_level)>0):
-	while (not queue_of_nodes.empty()):
-		#
-		#
-		#
-
-		processes = []
-
-		# creating processes
-		for w in range(number_of_processes):
-			p = multiprocessing.Process(target=compute_log_E_c_tilda_multiprocessing,
-			                            args=(queue_of_nodes,
-			                                  # nodes_of_next_level,
-			                                  context_node_mapping, id_to_word, log_discounts, backoff_to_uniform))
-			processes.append(p)
-		print("creating %d processes to renormalize %d-gram..." % (number_of_processes, current_order + 1))
-
-		for p in processes:
-			p.start()
-
-		for p in processes:
-			p.join()
-
-		renorm_time = timeit.default_timer() - renorm_time
-		print("renorm %d %d-gram took %.2fs..." % (len(context_node_mapping), current_order, renorm_time))
-		sys.stdout.flush()
-		renorm_time = timeit.default_timer()
-
-		current_order += 1
-		temp_context_node_mapping = {}
-		for context_ids in context_node_mapping:
-			parent = context_node_mapping[context_ids]
-			for temp_word_id in parent._children:
-				child = parent._children[temp_word_id]
-				# parent._log_p_word[temp_word_id] = child._log_E_c_tilda - parent._log_sum_E_c_tilda
-				temp_context_node_mapping[context_ids + (temp_word_id,)] = child
-				queue_of_nodes.put(context_ids + (temp_word_id,))
-		# nodes_of_next_level.put((child, context_ids + [temp_word_id]))
-		# nodes_of_next_level.append((child, context_ids + [temp_word_id]))
-		context_node_mapping = temp_context_node_mapping
-		print("checkpoint2", queue_of_nodes.qsize(), len(context_node_mapping))
-		for x in context_node_mapping:
-			print(x)
-
-		'''
-		parent, context_ids = nodes_of_current_level.pop(0)
-		if len(context_ids) > current_order:
-			current_order += 1
-			renorm_time = timeit.default_timer() - renorm_time
-			print("renorm %d %d-gram took %.2fs..." % (number_of_ngrams, current_order, renorm_time))
-			sys.stdout.flush()
-			renorm_time = timeit.default_timer()
-			number_of_ngrams = 0
-
-		compute_log_E_c_tilda(parent, context_ids, log_discounts, id_to_word, backoff_to_uniform)
-		# if len(parent._children)>0:
-		# print(context_ids, parent._log_sum_E_c_tilda)
-		'''
-
-
-def compute_log_E_c_tilda_multiprocessing(nodes_of_current_level,
-                                          # nodes_of_next_level,
-                                          context_node_mapping, id_to_word, log_discounts, backoff_to_uniform=False):
-	while True:
-		try:
-			'''
-				try to get task from the queue. get_nowait() function will 
-				raise queue.Empty exception if the queue is empty. 
-				queue(False) function would do the same task also.
-			'''
-			# task = tasks_to_accomplish.get_nowait()
-			# parent, context_ids = nodes_of_current_level.pop(0)
-			# parent, context_ids = nodes_of_current_level.get_nowait()
-			context_ids = nodes_of_current_level.get(False)
-		except queue.Empty:
-			break
-		except IndexError:
-			break
-		else:
-			'''
-				if no exception has been raised, add the task completion 
-				message to task_that_are_done queue
-			'''
-
-			# print(context_ids)
-			print(str(context_ids) + ' is done by ' + multiprocessing.current_process().name)
-			# print(task)
-			# tasks_that_are_done.put(task + ' is done by ' + current_process().name)
-			# time.sleep(numpy.random.random())
-
-			#
-			#
-			#
-			#
-			#
-
-			parent = context_node_mapping[context_ids]
-			# (parent, context_ids, log_discounts, id_to_word, backoff_to_uniform=False):
-			if len(parent._children) == 0:
-				continue
-
-			log_sum_E_c_tilda = -1e3
-			context_window_size = len(context_ids)
-			# for word_id in log_E_c_context_word[context_ids]:
-			for temp_word_id in id_to_word:
-				if temp_word_id in parent._children:
-					child = parent._children[temp_word_id]
-					# log_s_table_context_word[context_ids]:
-
-					if context_window_size == 0 and backoff_to_uniform:
-						log_p_word_given_temp_context = -numpy.log(len(id_to_word))
-					else:
-						# temp_node = find(root, context_ids[1:])
-						temp_node = parent._backoff_node
-						log_p_word_given_temp_context = temp_node._log_p_word[temp_word_id]
-					assert (not numpy.isnan(log_p_word_given_temp_context))
-
-					# print(context_ids, temp_word_id, child._log_E_c, log_discounts[context_window_size], child._log_p_c_gt0,
-					# parent._log_sum_E_n_ge1, log_p_word_given_temp_context)
-					# sys.stdout.flush()
-
-					temp = numpy.log(
-						max(0, numpy.exp(child._log_E_c) -
-						    numpy.exp(log_discounts[context_window_size] + child._log_p_c_gt0))
-						+ numpy.exp(
-							log_discounts[
-								context_window_size] + parent._log_sum_E_n_ge1 + log_p_word_given_temp_context)
-						# + interpolation_discount * numpy.exp(
-						# log_p_c_eq0_context_word[context_ids][word_id] + log_p_word_given_temp_context)
-					)
-					child._log_E_c_tilda = temp
-				else:
-					temp = log_discounts[context_window_size] + parent._log_sum_E_n_ge1
-					temp_node = parent
-					for j in range(len(context_ids)):
-						# temp_node = find(root, context_ids[j + 1:])
-						temp_node = temp_node._backoff_node
-
-						'''
-						if context_ids == [3, 4]:
-							if temp_word_id in temp_node._log_p_word:
-								print("found", temp_word_id, temp, context_ids[j + 1:], temp_node._log_p_word[temp_word_id])
-							else:
-								print("not found", temp_word_id, temp, context_ids[j + 1:],
-								      log_discounts[context_window_size - j - 1],
-								      temp_node._log_sum_E_n_ge1, temp_node._log_sum_E_c_tilda)
-						'''
-						if temp_word_id in temp_node._log_p_word:
-							temp += temp_node._log_p_word[temp_word_id]
-							break
-						if context_window_size - j - 1 not in log_discounts:
-							break
-						temp += log_discounts[context_window_size - j - 1]
-						temp += temp_node._log_sum_E_n_ge1 - temp_node._log_sum_E_c_tilda
-
-				assert (not numpy.isnan(temp))
-
-				# if context_ids == [3, 4]:
-				# print(temp_word_id, (temp_word_id in parent._children), log_sum_E_c_tilda, temp)
-
-				log_sum_E_c_tilda = numpy.logaddexp(log_sum_E_c_tilda, temp)
-				assert (not numpy.isnan(log_sum_E_c_tilda))
-
-			parent._log_sum_E_c_tilda = log_sum_E_c_tilda
-
-			#
-			#
-			#
-			#
-			#
-			# '''
-			for temp_word_id in parent._children:
-				child = parent._children[temp_word_id]
-				parent._log_p_word[temp_word_id] = child._log_E_c_tilda - parent._log_sum_E_c_tilda
-	# context_node_mapping[context_ids + (temp_word_id,)] = child
-	# nodes_of_next_level.put(context_ids + (temp_word_id,), False)
-	# print(nodes_of_next_level.qsize())
-	# nodes_of_next_level.put((child, context_ids + [temp_word_id]))
-	# nodes_of_next_level.append((child, context_ids + [temp_word_id]))
-	# '''
-
-	# nodes_of_current_level.close()
-	# print("checkpoint1", nodes_of_next_level.qsize())
-	return True
